@@ -24,4 +24,7 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install golangci-lint (matches make lint / go.mod toolchain)
+        run: make golangci-lint
+
       - uses: j178/prek-action@v3.0.0
