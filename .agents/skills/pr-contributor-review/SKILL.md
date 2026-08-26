@@ -165,4 +165,3 @@ When reviewing or preparing a contributor PR:
 - **pr-address-feedback** skill: Responding to review comments and resolving threads.
 - **CONTRIBUTING.md**: PR template, testing, security checklist.
 - **README.md**: Quality gates (make lint, make test).
-

@@ -361,4 +361,3 @@ gh api repos/ansible/apme-operator/pulls/N/reviews --jq '.[] | select(.user.logi
 # New CodeRabbit inline comments
 gh api repos/ansible/apme-operator/pulls/N/comments --jq '.[] | select(.user.login == "coderabbitai[bot]" and .created_at > "ISO8601") | {created_at, path, body: .body[0:200]}'
 ```
-
