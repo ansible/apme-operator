@@ -181,7 +181,21 @@ func (r *ApmeReconciler) apply(ctx context.Context, owner *apmev1alpha1.Apme, ob
 	if err := controllerutil.SetControllerReference(owner, obj, r.Scheme); err != nil {
 		return err
 	}
-	return r.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner(apmev1alpha1.FieldManager))
+	ac, err := objectApplyConfiguration(obj)
+	if err != nil {
+		return err
+	}
+	return r.Apply(ctx, ac, client.ForceOwnership, client.FieldOwner(apmev1alpha1.FieldManager))
+}
+
+func objectApplyConfiguration(obj client.Object) (runtime.ApplyConfiguration, error) {
+	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	u := &unstructured.Unstructured{Object: raw}
+	u.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+	return client.ApplyConfigurationFromUnstructured(u), nil
 }
 
 func (r *ApmeReconciler) ensurePostgresSecret(ctx context.Context, owner *apmev1alpha1.Apme, d resolve.Desired) error {
