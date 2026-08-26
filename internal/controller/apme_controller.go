@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -177,25 +178,23 @@ func (r *ApmeReconciler) fail(ctx context.Context, cr *apmev1alpha1.Apme, d reso
 	return ctrl.Result{}, err
 }
 
+// applyPatch is server-side apply without using the deprecated client.Apply
+// patch constant (SA1019 in controller-runtime >=0.23). Prefer this over
+// ApplyConfigurationFromUnstructured for typed objects: converting API
+// structs to unstructured cannot distinguish unset fields from explicit zeros.
+type applyPatch struct{}
+
+func (applyPatch) Type() types.PatchType { return types.ApplyPatchType }
+
+func (applyPatch) Data(obj client.Object) ([]byte, error) {
+	return json.Marshal(obj)
+}
+
 func (r *ApmeReconciler) apply(ctx context.Context, owner *apmev1alpha1.Apme, obj client.Object) error {
 	if err := controllerutil.SetControllerReference(owner, obj, r.Scheme); err != nil {
 		return err
 	}
-	ac, err := objectApplyConfiguration(obj)
-	if err != nil {
-		return err
-	}
-	return r.Apply(ctx, ac, client.ForceOwnership, client.FieldOwner(apmev1alpha1.FieldManager))
-}
-
-func objectApplyConfiguration(obj client.Object) (runtime.ApplyConfiguration, error) {
-	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-	u := &unstructured.Unstructured{Object: raw}
-	u.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
-	return client.ApplyConfigurationFromUnstructured(u), nil
+	return r.Patch(ctx, obj, applyPatch{}, client.ForceOwnership, client.FieldOwner(apmev1alpha1.FieldManager))
 }
 
 func (r *ApmeReconciler) ensurePostgresSecret(ctx context.Context, owner *apmev1alpha1.Apme, d resolve.Desired) error {
