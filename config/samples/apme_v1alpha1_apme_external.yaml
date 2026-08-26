@@ -1,0 +1,18 @@
+apiVersion: apme.ansible.com/v1alpha1
+kind: Apme
+metadata:
+  name: apme-external
+  namespace: apme
+spec:
+  version: "2026.8.6"
+  replicas: 1
+  database:
+    connectionSecretRef:
+      name: apme-external-db
+      key: database-url
+  exposure:
+    route:
+      enabled: true
+      host: apme.apps.example.com
+  abbenay:
+    enabled: false
