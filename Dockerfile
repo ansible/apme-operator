@@ -1,33 +1,30 @@
 # Build the manager binary
-FROM golang:1.24 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
-WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+# go-toolset runs as UID 1001; GOPATH/GOCACHE must stay writable for
+# OpenShift builds that assign an arbitrary UID.
+ENV CGO_ENABLED=0 \
+    GOCACHE=/tmp/gocache \
+    GOPATH=/tmp/gopath
+
+WORKDIR /opt/app-root/src
+COPY --chown=1001:0 go.mod go.mod
+COPY --chown=1001:0 go.sum go.sum
 RUN go mod download
 
-# Copy the go source
-COPY cmd/main.go cmd/main.go
-COPY api/ api/
-COPY internal/ internal/
+COPY --chown=1001:0 cmd/main.go cmd/main.go
+COPY --chown=1001:0 api/ api/
+COPY --chown=1001:0 internal/ internal/
 
-# Build
-# the GOARCH has not a default value to allow the binary be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# GOARCH has no default so the binary matches the host (or build.openshift.io) arch.
+RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# UBI Minimal runtime for OpenShift (restricted-v2 / arbitrary UID).
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /opt/app-root/src/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
