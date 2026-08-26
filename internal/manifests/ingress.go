@@ -36,7 +36,7 @@ func Ingress(d resolve.Desired) *networkingv1.Ingress {
 		ing.Spec.IngressClassName = &d.IngressClassName
 	}
 	if len(d.IngressAnnotations) > 0 {
-		ing.ObjectMeta.Annotations = d.IngressAnnotations
+		ing.Annotations = d.IngressAnnotations
 	}
 	if d.IngressTLSSecretName != "" && d.IngressHost != "" {
 		ing.Spec.TLS = []networkingv1.IngressTLS{{

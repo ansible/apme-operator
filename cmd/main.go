@@ -204,7 +204,8 @@ func main() {
 	}
 
 	hasRoute := false
-	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "route.openshift.io", Kind: "Route"}, "v1"); err == nil {
+	gk := schema.GroupKind{Group: "route.openshift.io", Kind: "Route"}
+	if _, err := mgr.GetRESTMapper().RESTMapping(gk, "v1"); err == nil {
 		hasRoute = true
 	}
 	if err := (&controller.ApmeReconciler{

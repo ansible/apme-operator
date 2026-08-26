@@ -63,89 +63,9 @@ func (r *ApmeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	d := resolve.From(cr)
-
-	if err := r.apply(ctx, cr, manifests.ServiceAccount(d)); err != nil {
+	leftoverPG, err := r.ensureAll(ctx, cr, d)
+	if err != nil {
 		return r.fail(ctx, cr, d, err)
-	}
-	if err := r.apply(ctx, cr, manifests.SessionsPVC(d)); err != nil {
-		return r.fail(ctx, cr, d, err)
-	}
-	if err := r.apply(ctx, cr, manifests.ProxyCachePVC(d)); err != nil {
-		return r.fail(ctx, cr, d, err)
-	}
-
-	leftoverPG := false
-	if d.DatabaseMode == apmev1alpha1.DatabaseManaged {
-		if err := r.ensurePostgresSecret(ctx, cr, d); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-		if err := r.apply(ctx, cr, postgres.StatefulSet(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-		if err := r.apply(ctx, cr, manifests.PostgresService(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-		if d.NetworkPolicy {
-			if err := r.apply(ctx, cr, manifests.PostgresNetworkPolicy(d)); err != nil {
-				return r.fail(ctx, cr, d, err)
-			}
-		}
-	} else {
-		leftoverPG = r.managedPostgresExists(ctx, d)
-	}
-
-	if d.Abbenay {
-		if d.GenerateAbbenayToken {
-			if err := r.ensureAbbenayToken(ctx, cr, d); err != nil {
-				return r.fail(ctx, cr, d, err)
-			}
-		}
-		if d.AbbenayConfigMap == "" {
-			if err := r.apply(ctx, cr, manifests.DefaultAbbenayConfigMap(d)); err != nil {
-				return r.fail(ctx, cr, d, err)
-			}
-		}
-		if d.AbbenayPersist {
-			if err := r.apply(ctx, cr, manifests.AbbenayPVC(d)); err != nil {
-				return r.fail(ctx, cr, d, err)
-			}
-		}
-	}
-
-	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.AbbenayTokenName, d.Version)
-	if err := r.apply(ctx, cr, manifests.Deployment(d, sum)); err != nil {
-		return r.fail(ctx, cr, d, err)
-	}
-	if err := r.apply(ctx, cr, manifests.EngineService(d)); err != nil {
-		return r.fail(ctx, cr, d, err)
-	}
-	if err := r.apply(ctx, cr, manifests.GatewayService(d)); err != nil {
-		return r.fail(ctx, cr, d, err)
-	}
-	if d.UI {
-		if err := r.apply(ctx, cr, manifests.UIService(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-	}
-	if d.RouteEnabled && r.hasRouteAPI() {
-		if d.UI {
-			if err := r.apply(ctx, cr, manifests.UIRoute(d)); err != nil {
-				return r.fail(ctx, cr, d, err)
-			}
-		}
-		if err := r.apply(ctx, cr, manifests.APIRoute(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-	}
-	if d.IngressEnabled {
-		if err := r.apply(ctx, cr, manifests.Ingress(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
-	}
-	if d.NetworkPolicy {
-		if err := r.apply(ctx, cr, manifests.APMENetworkPolicy(d)); err != nil {
-			return r.fail(ctx, cr, d, err)
-		}
 	}
 
 	if err := r.patchStatus(ctx, cr, d, leftoverPG, nil); err != nil {
@@ -153,6 +73,102 @@ func (r *ApmeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: requeueStatus}, nil
+}
+
+func (r *ApmeReconciler) ensureAll(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) (bool, error) {
+	if err := r.applyCore(ctx, cr, d); err != nil {
+		return false, err
+	}
+	leftover, err := r.ensureDatabase(ctx, cr, d)
+	if err != nil {
+		return leftover, err
+	}
+	if err := r.ensureAbbenay(ctx, cr, d); err != nil {
+		return leftover, err
+	}
+	return leftover, r.applyWorkload(ctx, cr, d)
+}
+
+func (r *ApmeReconciler) applyCore(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) error {
+	for _, obj := range []client.Object{
+		manifests.ServiceAccount(d),
+		manifests.SessionsPVC(d),
+		manifests.ProxyCachePVC(d),
+	} {
+		if err := r.apply(ctx, cr, obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ApmeReconciler) ensureDatabase(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) (bool, error) {
+	if d.DatabaseMode != apmev1alpha1.DatabaseManaged {
+		return r.managedPostgresExists(ctx, d), nil
+	}
+	if err := r.ensurePostgresSecret(ctx, cr, d); err != nil {
+		return false, err
+	}
+	if err := r.apply(ctx, cr, postgres.StatefulSet(d)); err != nil {
+		return false, err
+	}
+	if err := r.apply(ctx, cr, manifests.PostgresService(d)); err != nil {
+		return false, err
+	}
+	if d.NetworkPolicy {
+		return false, r.apply(ctx, cr, manifests.PostgresNetworkPolicy(d))
+	}
+	return false, nil
+}
+
+func (r *ApmeReconciler) ensureAbbenay(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) error {
+	if !d.Abbenay {
+		return nil
+	}
+	if d.GenerateAbbenayToken {
+		if err := r.ensureAbbenayToken(ctx, cr, d); err != nil {
+			return err
+		}
+	}
+	if d.AbbenayConfigMap == "" {
+		if err := r.apply(ctx, cr, manifests.DefaultAbbenayConfigMap(d)); err != nil {
+			return err
+		}
+	}
+	if d.AbbenayPersist {
+		return r.apply(ctx, cr, manifests.AbbenayPVC(d))
+	}
+	return nil
+}
+
+func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) error {
+	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.AbbenayTokenName, d.Version)
+	objs := []client.Object{
+		manifests.Deployment(d, sum),
+		manifests.EngineService(d),
+		manifests.GatewayService(d),
+	}
+	if d.UI {
+		objs = append(objs, manifests.UIService(d))
+	}
+	if d.RouteEnabled && r.hasRouteAPI() {
+		if d.UI {
+			objs = append(objs, manifests.UIRoute(d))
+		}
+		objs = append(objs, manifests.APIRoute(d))
+	}
+	if d.IngressEnabled {
+		objs = append(objs, manifests.Ingress(d))
+	}
+	if d.NetworkPolicy {
+		objs = append(objs, manifests.APMENetworkPolicy(d))
+	}
+	for _, obj := range objs {
+		if err := r.apply(ctx, cr, obj); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *ApmeReconciler) fail(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired, err error) (ctrl.Result, error) {

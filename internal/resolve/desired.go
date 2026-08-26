@@ -65,9 +65,9 @@ type Desired struct {
 	ProxyEnv      []corev1.EnvVar
 }
 
-func ptrBool(p *bool, def bool) bool {
+func defaultTrue(p *bool) bool {
 	if p == nil {
-		return def
+		return true
 	}
 	return *p
 }
@@ -89,16 +89,16 @@ func From(cr *apmev1alpha1.Apme) Desired {
 		PullPolicy:           cr.Spec.Image.PullPolicy,
 		PullSecrets:          cr.Spec.Image.PullSecrets,
 		Replicas:             cr.Spec.Replicas,
-		Gitleaks:             ptrBool(cr.Spec.Components.Gitleaks, true),
-		CollectionHealth:     ptrBool(cr.Spec.Components.CollectionHealth, true),
-		DepAudit:             ptrBool(cr.Spec.Components.DepAudit, true),
-		UI:                   ptrBool(cr.Spec.Components.UI, true),
+		Gitleaks:             defaultTrue(cr.Spec.Components.Gitleaks),
+		CollectionHealth:     defaultTrue(cr.Spec.Components.CollectionHealth),
+		DepAudit:             defaultTrue(cr.Spec.Components.DepAudit),
+		UI:                   defaultTrue(cr.Spec.Components.UI),
 		Abbenay:              cr.Spec.Abbenay.Enabled,
 		AbbenayImage:         cr.Spec.Abbenay.Image,
 		AbbenayTokenName:     cr.Spec.Abbenay.TokenSecretRef.Name,
 		AbbenayTokenKey:      cr.Spec.Abbenay.TokenSecretRef.Key,
 		AbbenayConfigMap:     cr.Spec.Abbenay.ConfigMapRef.Name,
-		NetworkPolicy:        ptrBool(cr.Spec.NetworkPolicy.Enabled, true),
+		NetworkPolicy:        defaultTrue(cr.Spec.NetworkPolicy.Enabled),
 		Resources:            cr.Spec.Resources,
 		RouteHost:            cr.Spec.Exposure.Route.Host,
 		IngressEnabled:       cr.Spec.Exposure.Ingress.Enabled,
@@ -121,7 +121,7 @@ func From(cr *apmev1alpha1.Apme) Desired {
 		d.Replicas = 1
 	}
 
-	d.RouteEnabled = ptrBool(cr.Spec.Exposure.Route.Enabled, true)
+	d.RouteEnabled = defaultTrue(cr.Spec.Exposure.Route.Enabled)
 	d.RouteTermination = cr.Spec.Exposure.Route.TLS.Termination
 	if d.RouteTermination == "" {
 		d.RouteTermination = "edge"
@@ -168,7 +168,7 @@ func From(cr *apmev1alpha1.Apme) Desired {
 			d.GenerateAbbenayToken = true
 			d.AbbenayTokenName = cr.Name + "-abbenay"
 		}
-		d.AbbenayPersist = ptrBool(cr.Spec.Abbenay.Persistence.Enabled, true)
+		d.AbbenayPersist = defaultTrue(cr.Spec.Abbenay.Persistence.Enabled)
 		d.AbbenayPVCSize = qtyOr(cr.Spec.Abbenay.Persistence.Size, "1Gi")
 		d.AbbenayStorageClass = cr.Spec.Abbenay.Persistence.StorageClass
 	}
