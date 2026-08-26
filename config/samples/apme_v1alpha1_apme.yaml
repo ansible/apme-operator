@@ -1,0 +1,21 @@
+apiVersion: apme.ansible.com/v1alpha1
+kind: Apme
+metadata:
+  labels:
+    app.kubernetes.io/name: apme-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: apme
+spec:
+  version: "2026.8.6"
+  replicas: 1
+  components:
+    gitleaks: true
+    collectionHealth: true
+    depAudit: true
+    ui: true
+  exposure:
+    route:
+      enabled: true
+      host: apme.apps.example.com
+  abbenay:
+    enabled: false

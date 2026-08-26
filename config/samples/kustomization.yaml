@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- apme_v1alpha1_apme.yaml
+- apme_v1alpha1_apme_external.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
