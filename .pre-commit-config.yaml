@@ -16,16 +16,19 @@ repos:
 
   - repo: local
     hooks:
+      # Bootstraps bin/golangci-lint via make so fresh clones work without a
+      # prior make lint. types:[go] avoids running on non-Go commits.
       - id: golangci-lint
         name: golangci-lint
-        entry: bin/golangci-lint run
+        entry: bash -c 'make --silent golangci-lint && bin/golangci-lint run'
         language: system
+        types: [go]
         pass_filenames: false
-        always_run: true
+        require_serial: true
 
       - id: golangci-lint-config
         name: golangci-lint config verify
-        entry: bin/golangci-lint config verify
+        entry: bash -c 'make --silent golangci-lint && bin/golangci-lint config verify'
         language: system
         pass_filenames: false
         always_run: true
