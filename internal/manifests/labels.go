@@ -1,9 +1,9 @@
 package manifests
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -49,10 +49,12 @@ func selectorLabels(d resolve.Desired, component string) map[string]string {
 }
 
 // Checksum is a stable annotation value so the Deployment rolls when inputs change.
+// Uses FNV-1a (not a password hash): inputs are names/keys/version strings for
+// change detection, not secret material.
 func Checksum(parts ...string) string {
-	h := sha256.New()
+	h := fnv.New64a()
 	for _, p := range parts {
 		_, _ = fmt.Fprintln(h, p)
 	}
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	return hex.EncodeToString(h.Sum(nil))
 }
