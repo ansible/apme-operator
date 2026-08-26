@@ -30,6 +30,7 @@ External database: set `spec.database.connectionSecretRef.name` to a Secret whos
 - Go 1.24+
 - `kubectl` and an OpenShift project (Routes) or a cluster with Ingress
 - Container runtime for `make docker-build`
+- Git hooks (optional but recommended): `uv tool install prek && prek install` — runs the same checks as CI (`make lint` via golangci-lint)
 
 Operator SDK v1.42.3 was used to scaffold. Day-to-day: `make`.
 

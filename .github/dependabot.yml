@@ -28,3 +28,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+
+  # Hook rev pins in .pre-commit-config.yaml (prek / pre-commit).
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

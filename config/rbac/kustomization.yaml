@@ -25,4 +25,3 @@ resources:
 - apme_admin_role.yaml
 - apme_editor_role.yaml
 - apme_viewer_role.yaml
-
