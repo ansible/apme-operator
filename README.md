@@ -14,10 +14,8 @@ The operator reconciles a namespaced `Apme` custom resource into the **Simple** 
 |----------|-----------|
 | Simple topology (`status.topology: Simple`) | Split / Gateway-outside topology |
 | Managed or external Postgres | SQLite |
-| OpenShift Routes (default) and optional Ingress | Helm wrapping / calling `helm` |
-| NetworkPolicies, restricted SCC–friendly pods | Backup / Restore CRDs |
-
-Helm in [`ansible/apme`](https://github.com/ansible/apme) remains a supported install path for APME. This operator is a native CR-based alternative, not a chart wrapper.
+| OpenShift Routes (default) and optional Ingress | Backup / Restore CRDs |
+| NetworkPolicies, restricted SCC–friendly pods | Multi-replica Simple deployments |
 
 ## Quick start
 

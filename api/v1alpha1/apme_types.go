@@ -85,7 +85,7 @@ type ApmeSpec struct {
 	// +optional
 	Exposure ExposureSpec `json:"exposure,omitempty"`
 
-	// Abbenay is off by default (Helm parity).
+	// Abbenay is off by default.
 	// +optional
 	Abbenay AbbenaySpec `json:"abbenay,omitempty"`
 

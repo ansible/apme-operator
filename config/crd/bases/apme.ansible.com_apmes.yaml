@@ -52,7 +52,7 @@ spec:
             description: ApmeSpec defines the desired state of Apme.
             properties:
               abbenay:
-                description: Abbenay is off by default (Helm parity).
+                description: Abbenay is off by default.
                 properties:
                   configMapRef:
                     description: ConfigMapRef optionally seeds Abbenay config.yaml.
