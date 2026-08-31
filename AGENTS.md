@@ -1,7 +1,8 @@
 # Agent instructions (apme-operator)
 
 Go Kubebuilder operator for APME Simple topology on OpenShift. See
-[README.md](README.md) for CRD, deploy, and test basics.
+[README.md](README.md) for orientation, [docs/user-guide.md](docs/user-guide.md)
+for the CR, and [docs/development.md](docs/development.md) for build/test.
 
 ## Quality gates
 
