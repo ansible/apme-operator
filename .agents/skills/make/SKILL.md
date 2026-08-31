@@ -109,6 +109,7 @@ make help
 
 | Workflow | Command |
 |----------|---------|
-| `.github/workflows/lint.yml` | `make lint` (via golangci-lint-action) |
+| `.github/workflows/prek.yml` | `make golangci-lint` + prek |
 | `.github/workflows/test.yml` | `go mod tidy && make test` |
 | `.github/workflows/test-e2e.yml` | `make test-e2e` |
+| `.github/workflows/release.yml` | multi-arch image push + `make build-installer` |

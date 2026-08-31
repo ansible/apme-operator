@@ -29,11 +29,24 @@ logic lives in the `Makefile`; CI invokes `make` or the same underlying tools.
 
 | Workflow | Job | Local equivalent |
 |----------|-----|------------------|
-| `lint.yml` | golangci-lint | `make lint` |
+| `prek.yml` | prek + golangci-lint | `prek run` / `make lint` |
 | `test.yml` | `go mod tidy` + `make test` | same |
 | `test-e2e.yml` | Kind + e2e | `make test-e2e` |
+| `release.yml` | multi-arch image + `install.yaml` | `make docker-buildx` + `make build-installer` |
 
-All three trigger on `push` and `pull_request`.
+`prek` / `test` / `test-e2e` trigger on `push` and `pull_request`.
+`release.yml` triggers on `v*.*.*` tags (and `workflow_dispatch` for an existing tag).
+
+## Release workflow
+
+Publishes `ghcr.io/<owner>/apme-operator` (linux/amd64 + linux/arm64) and a GitHub
+Release with `dist/install.yaml`. Also pushes to
+`quay.io/<QUAY_NAMESPACE>/apme-operator` when `QUAY_USERNAME` /
+`QUAY_PASSWORD` secrets are set (`QUAY_NAMESPACE` defaults to the repo owner;
+override with the `QUAY_NAMESPACE` Actions variable).
+
+Operator tags are independent of APME image tags. Bump
+`api/v1alpha1.DefaultVersion` when shipping a new default APME pin.
 
 ## Rules for modifications
 
@@ -41,7 +54,6 @@ All three trigger on `push` and `pull_request`.
 - **DO** use `actions/setup-go` with `go-version-file: go.mod`.
 - **DO** keep golangci-lint version aligned with `Makefile` (`v2.1.0` today).
 - **DO NOT** hardcode Go versions in workflow YAML.
-- **DO NOT** add publish/release steps without maintainer approval.
 - **DO NOT** duplicate `controller-gen` or `kustomize` install logic in YAML —
   the Makefile already downloads tools to `bin/`.
 

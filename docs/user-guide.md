@@ -19,7 +19,7 @@ kind: Apme
 metadata:
   name: apme
 spec:
-  version: "2026.8.6"
+  version: "2026.8.10"
   replicas: 1                 # CEL max 1 in v1
   exposure:
     route:
@@ -47,7 +47,7 @@ Samples in-repo:
 
 | Field | Default / notes |
 |-------|-----------------|
-| `version` | APME image tag (default `2026.8.6`) |
+| `version` | APME image tag (default `2026.8.10`) |
 | `image.registry` | `quay.io/ansible`; images are `{registry}/apme-{name}:{version}` |
 | `replicas` | `1` (maximum 1 in v1) |
 | `components.*` | Optional toggles (`gitleaks`, `collectionHealth`, `depAudit`, `ui`); omitted booleans default **true** |

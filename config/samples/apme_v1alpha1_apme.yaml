@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: apme
 spec:
-  version: "2026.8.6"
+  version: "2026.8.10"
   replicas: 1
   components:
     gitleaks: true

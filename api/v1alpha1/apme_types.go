@@ -24,7 +24,7 @@ import (
 
 const (
 	// DefaultVersion is the APME image tag shipped with this operator.
-	DefaultVersion = "2026.8.6"
+	DefaultVersion = "2026.8.10"
 	// DefaultRegistry is the default pull registry for APME images.
 	DefaultRegistry = "quay.io/ansible"
 	// DefaultAbbenayImage is the Abbenay sidecar image when AI is enabled.
@@ -54,7 +54,7 @@ const (
 //
 // +kubebuilder:validation:XValidation:rule="!(has(self.components) && has(self.components.ui) && self.components.ui && has(self.exposure) && has(self.exposure.route) && self.exposure.route.enabled && (!has(self.exposure.route.host) || size(self.exposure.route.host) == 0))",message="exposure.route.host is required when UI and Route are enabled"
 type ApmeSpec struct {
-	// Version is the APME image tag (without a leading v). Defaults to 2026.8.6.
+	// Version is the APME image tag (without a leading v). Defaults to 2026.8.10.
 	// +optional
 	Version string `json:"version,omitempty"`
 

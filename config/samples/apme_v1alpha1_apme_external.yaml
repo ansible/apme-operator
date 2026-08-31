@@ -4,7 +4,7 @@ metadata:
   name: apme-external
   namespace: apme
 spec:
-  version: "2026.8.6"
+  version: "2026.8.10"
   replicas: 1
   database:
     connectionSecretRef:

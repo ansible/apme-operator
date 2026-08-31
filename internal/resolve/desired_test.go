@@ -15,7 +15,7 @@ func TestFromManagedDefaults(t *testing.T) {
 	if d.DatabaseMode != apmev1alpha1.DatabaseManaged {
 		t.Fatalf("mode=%s", d.DatabaseMode)
 	}
-	if d.Image("engine") != "quay.io/ansible/apme-engine:2026.8.6" {
+	if d.Image("engine") != "quay.io/ansible/apme-engine:2026.8.10" {
 		t.Fatalf("image=%s", d.Image("engine"))
 	}
 	if !d.UI || !d.Gitleaks || d.Abbenay {
