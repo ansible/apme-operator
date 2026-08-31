@@ -69,7 +69,28 @@ make test
 
 envtest coverage includes managed Postgres, external Secret, Abbenay on/off, and managed→external mode switch (leftover Postgres is not deleted).
 
-CI mirrors these targets: `.github/workflows/test.yml`, `prek.yml`, `test-e2e.yml`.
+CI mirrors these targets: `.github/workflows/test.yml`, `prek.yml`,
+`test-e2e.yml`, and `release.yml` (on version tags).
+
+## Release
+
+Operator releases are independent of APME image tags. Each operator release pins
+a default APME tag via `DefaultVersion` in `api/v1alpha1/apme_types.go`
+(override per CR with `spec.version`).
+
+1. Bump `DefaultVersion` (and samples/docs) when adopting a new APME tag.
+2. Tag the repo: `git tag v0.1.0 && git push upstream v0.1.0`
+3. `.github/workflows/release.yml` builds `linux/amd64` + `linux/arm64`, pushes
+   to `ghcr.io/<owner>/apme-operator`, attaches `dist/install.yaml` to a GitHub
+   Release, and mirrors to Quay when `QUAY_USERNAME` / `QUAY_PASSWORD` are
+   configured.
+
+Local equivalent:
+
+```sh
+make docker-buildx IMG=ghcr.io/$USER/apme-operator:0.1.0
+make build-installer IMG=ghcr.io/$USER/apme-operator:0.1.0
+```
 
 ## Project layout
 

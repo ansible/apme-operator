@@ -373,7 +373,7 @@ spec:
                 type: object
               version:
                 description: Version is the APME image tag (without a leading v).
-                  Defaults to 2026.8.6.
+                  Defaults to 2026.8.10.
                 type: string
             type: object
             x-kubernetes-validations:
