@@ -6,16 +6,15 @@
 
 A Kubernetes operator for deploying and managing [APME](https://github.com/ansible/apme) on OpenShift, built with [Operator SDK](https://sdk.operatorframework.io/) / [Kubebuilder](https://book.kubebuilder.io/) (Go).
 
-The operator reconciles a namespaced `Apme` custom resource into the **Simple** all-in-one topology (Gateway and UI share the engine Deployment), with **Postgres-only** persistence — either a managed single-replica StatefulSet or an external connection Secret.
+The operator reconciles a namespaced `Apme` custom resource into the **Simple** all-in-one topology (Gateway and UI share the engine Deployment), with **Postgres-only** persistence — either a managed single-replica StatefulSet or an external connection Secret. Operands default to NetworkPolicies and restricted SCC–friendly pod specs.
 
 ## Scope (v1)
 
 | Included | Not in v1 |
 |----------|-----------|
 | Simple topology (`status.topology: Simple`) | Split / Gateway-outside topology |
-| Managed or external Postgres | SQLite |
-| OpenShift Routes (default) and optional Ingress | Backup / Restore CRDs |
-| NetworkPolicies, restricted SCC–friendly pods | Multi-replica Simple deployments |
+| Managed or external Postgres | Backup / Restore CRDs |
+| OpenShift Routes (default) and optional Ingress | Multi-replica Simple deployments |
 
 ## Quick start
 
