@@ -1,69 +1,61 @@
 # APME Operator
 
-Go operator (Operator SDK / Kubebuilder) that installs [APME](https://github.com/ansible/apme) on OpenShift as a **Simple** all-in-one pod (ADR-069): Gateway and UI share the engine Deployment. Persistence is **Postgres only** ([APME #543](https://github.com/ansible/apme/pull/543)): a managed single-replica StatefulSet, or an external Secret.
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Tests](https://github.com/ansible/apme-operator/actions/workflows/test.yml/badge.svg)](https://github.com/ansible/apme-operator/actions/workflows/test.yml)
+[![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Ansible-yellow.svg)](https://docs.ansible.com/ansible/latest/community/code_of_conduct.html)
 
-v1 does **not** wrap Helm, does not use SQLite, and does not implement Split (Gateway-outside) topology. Helm in `ansible/apme` remains the documented K8s path until this operator actually installs. Plan: [issue #2](https://github.com/ansible/apme-operator/issues/2).
+A Kubernetes operator for deploying and managing [APME](https://github.com/ansible/apme) on OpenShift, built with [Operator SDK](https://sdk.operatorframework.io/) / [Kubebuilder](https://book.kubebuilder.io/) (Go).
 
-## CR
+The operator reconciles a namespaced `Apme` custom resource into the **Simple** all-in-one topology (Gateway and UI share the engine Deployment), with **Postgres-only** persistence — either a managed single-replica StatefulSet or an external connection Secret. Operands default to NetworkPolicies and restricted SCC–friendly pod specs.
 
-```yaml
-apiVersion: apme.ansible.com/v1alpha1
-kind: Apme
-metadata:
-  name: apme
-spec:
-  version: "2026.8.6"
-  replicas: 1                 # CEL max 1 in v1
-  exposure:
-    route:
-      enabled: true
-      host: apme.apps.example.com   # required when UI is on
-  # database.connectionSecretRef unset => operator creates Postgres
-  abbenay:
-    enabled: false
-```
+## Scope (v1)
 
-External database: set `spec.database.connectionSecretRef.name` to a Secret whose key (default `database-url`) is a `postgresql+asyncpg://` URL. Switching from managed to external **does not delete** the StatefulSet/PVC.
+| Included | Not in v1 |
+|----------|-----------|
+| Simple topology (`status.topology: Simple`) | Split / Gateway-outside topology |
+| Managed or external Postgres | Backup / Restore CRDs |
+| OpenShift Routes (default) and optional Ingress | Multi-replica Simple deployments |
 
-## Prerequisites
+## Quick start
 
-- Go 1.26+
-- `kubectl` and an OpenShift project (Routes) or a cluster with Ingress
-- Container runtime for `make docker-build`
-- Git hooks (optional but recommended): `uv tool install prek && prek install` — runs the same checks as CI (`make lint` via golangci-lint)
-
-Operator SDK v1.42.3 was used to scaffold. Day-to-day: `make`.
-
-## Deploy (inner loop)
+Requires `kubectl` (or `oc`) and a cluster. OpenShift is the primary target (Routes); Ingress works on vanilla Kubernetes.
 
 ```sh
 export IMG=quay.io/$USER/apme-operator:dev
 make docker-build docker-push deploy IMG=$IMG
-kubectl apply -f config/samples/apme_v1alpha1_apme.yaml
+
+kubectl create namespace apme --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n apme -f config/samples/apme_v1alpha1_apme.yaml
 ```
 
-`scripts/operator.mk` defines `NAMESPACE`, `QUAY_USER` / `IMAGE`, and `DEV_CR`.
+Edit `spec.exposure.route.host` in the sample to a hostname that resolves on your cluster before applying.
 
-Install CRDs only: `make install`. OLM bundle: `make bundle`.
-
-Uninstall: delete the `Apme` CR (owner refs garbage-collect children), then `make undeploy` / `make uninstall`.
-
-## Tests
+Check status:
 
 ```sh
-make test
-make lint
+kubectl get apme -n apme
+kubectl get pods -n apme
 ```
 
-envtest covers managed Postgres, external Secret, Abbenay on/off, and mode-switch (no delete of leftover Postgres).
+CRDs only: `make install`. Tear down: delete the `Apme` CR (owned objects GC), then `make undeploy` / `make uninstall`.
 
-## Layout
+## Documentation
 
-```
-api/v1alpha1/          Apme CRD
-internal/controller/   thin reconciler (SSA)
-internal/resolve/      CR → Desired (defaults, db mode)
-internal/manifests/    SA, PVC, Services, Routes, Ingress, NP, Deployment
-  containers/          one builder per APME container
-  postgres/            StatefulSet + generated Secret
-```
+| Doc | Contents |
+|-----|----------|
+| [User guide](docs/user-guide.md) | CR fields, database modes, exposure, samples |
+| [Development](docs/development.md) | Prerequisites, make targets, layout, tests |
+| [Contributing](CONTRIBUTING.md) | PR workflow and quality gates |
+| [Security](.github/SECURITY.md) | Vulnerability reporting |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md).
+
+We ask contributors to follow the [Ansible code of conduct](https://docs.ansible.com/ansible/latest/community/code_of_conduct.html).
+
+## Get help
+
+- Issues: [github.com/ansible/apme-operator/issues](https://github.com/ansible/apme-operator/issues)
+- Forum: [forum.ansible.com](https://forum.ansible.com)
+- APME product: [github.com/ansible/apme](https://github.com/ansible/apme)

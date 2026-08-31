@@ -85,7 +85,7 @@ type ApmeSpec struct {
 	// +optional
 	Exposure ExposureSpec `json:"exposure,omitempty"`
 
-	// Abbenay is off by default (Helm parity).
+	// Abbenay is off by default.
 	// +optional
 	Abbenay AbbenaySpec `json:"abbenay,omitempty"`
 
@@ -152,7 +152,7 @@ type PostgresSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// StorageSpec is APME pod PVC sizes (no gateway-data / SQLite).
+// StorageSpec is APME pod PVC sizes for sessions and Galaxy proxy cache.
 type StorageSpec struct {
 	// +optional
 	Sessions PVCSpec `json:"sessions,omitempty"`

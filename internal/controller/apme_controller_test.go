@@ -61,7 +61,7 @@ var _ = Describe("Apme Controller", func() {
 		}
 	})
 
-	It("creates managed Postgres and wires APME_DATABASE_URL without gateway-data", func() {
+	It("creates managed Postgres and wires APME_DATABASE_URL", func() {
 		nn := types.NamespacedName{Name: "apme-managed", Namespace: "default"}
 		cr := &apmev1alpha1.Apme{
 			ObjectMeta: metav1.ObjectMeta{Name: nn.Name, Namespace: nn.Namespace},
