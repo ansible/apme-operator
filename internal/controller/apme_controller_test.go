@@ -124,6 +124,16 @@ var _ = Describe("Apme Controller", func() {
 		dep := &appsv1.Deployment{}
 		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
 		Expect(hasContainer(dep, "abbenay")).To(BeTrue())
+		var abbenay *corev1.Container
+		for i := range dep.Spec.Template.Spec.Containers {
+			if dep.Spec.Template.Spec.Containers[i].Name == "abbenay" {
+				abbenay = &dep.Spec.Template.Spec.Containers[i]
+				break
+			}
+		}
+		Expect(abbenay).NotTo(BeNil())
+		Expect(abbenay.ReadinessProbe.Exec.Command).To(Equal([]string{"/opt/abbenay/abbenay", "status"}))
+		Expect(abbenay.LivenessProbe.Exec.Command).To(Equal([]string{"/opt/abbenay/abbenay", "status"}))
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-abbenay", Namespace: nn.Namespace}, &corev1.Secret{})).To(Succeed())
 
 		off := types.NamespacedName{Name: "apme-noai", Namespace: "default"}

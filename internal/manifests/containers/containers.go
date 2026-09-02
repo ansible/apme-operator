@@ -276,10 +276,14 @@ func UI(d resolve.Desired) corev1.Container {
 }
 
 // Abbenay is the optional AI sidecar (loopback + unix socket).
+// Probes use `/opt/abbenay/abbenay status` (checks the daemon Unix socket).
+// Do not use `node -e`: the published Abbenay image is a single binary with no
+// Node.js runtime, so those probes fail and keep the whole Simple pod NotReady.
 func Abbenay(d resolve.Desired) corev1.Container {
-	sock := `const s=require('net').createConnection('/tmp/abbenay-run/abbenay/daemon.sock');s.on('connect',function(){s.end();process.exit(0)}).on('error',function(){process.exit(1)})`
 	probe := &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"node", "-e", sock}}},
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/opt/abbenay/abbenay", "status"},
+		}},
 	}
 	ready := *probe
 	ready.InitialDelaySeconds, ready.PeriodSeconds = 5, 10
