@@ -16,6 +16,8 @@ spec:
   exposure:
     route:
       enabled: true
-      host: apme.apps.example.com
+      # Optional: set a custom host (needs routes/custom-host RBAC).
+      # Omit host to use the OpenShift-assigned default hostname.
+      # host: apme.apps.example.com
   abbenay:
     enabled: false

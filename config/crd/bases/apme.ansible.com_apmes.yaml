@@ -225,7 +225,9 @@ spec:
                           is distinguishable.
                         type: boolean
                       host:
-                        description: Host is required when UI and Route are enabled.
+                        description: |-
+                          Host is an optional custom Route hostname. When empty, OpenShift assigns
+                          a default host (requires routes/custom-host only when Host is set).
                         type: string
                       tls:
                         description: RouteTLSSpec is edge TLS on the Route.
@@ -376,12 +378,6 @@ spec:
                   Defaults to 2026.8.10.
                 type: string
             type: object
-            x-kubernetes-validations:
-            - message: exposure.route.host is required when UI and Route are enabled
-              rule: '!(has(self.components) && has(self.components.ui) && self.components.ui
-                && has(self.exposure) && has(self.exposure.route) && self.exposure.route.enabled
-                && (!has(self.exposure.route.host) || size(self.exposure.route.host)
-                == 0))'
           status:
             description: ApmeStatus is the observed state of Apme.
             properties:

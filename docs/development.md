@@ -67,7 +67,7 @@ make test
 | `make test-e2e` | Kind + ginkgo e2e (optional / slower) |
 | `make bundle` | OLM bundle generation |
 
-envtest coverage includes managed Postgres, external Secret, Abbenay on/off, and managed→external mode switch (leftover Postgres is not deleted).
+envtest coverage includes managed Postgres, external Secret, Abbenay on/off, and managed→external mode switch (leftover Postgres is not deleted). Fake-client unit tests cover Route garbage collection, host recreate, and image-pull status messages.
 
 CI mirrors these targets: `.github/workflows/test.yml`, `prek.yml`,
 `test-e2e.yml`, and `release.yml` (on version tags).
@@ -76,7 +76,11 @@ CI mirrors these targets: `.github/workflows/test.yml`, `prek.yml`,
 
 Operator releases are independent of APME image tags. Each operator release pins
 a default APME tag via `DefaultVersion` in `api/v1alpha1/apme_types.go`
-(override per CR with `spec.version`).
+(override per CR with `spec.version`). End users install with:
+
+```sh
+kubectl apply -f https://github.com/ansible/apme-operator/releases/latest/download/install.yaml
+```
 
 1. Bump `DefaultVersion` (and samples/docs) when adopting a new APME tag.
 2. Tag the repo: `git tag v0.1.0 && git push upstream v0.1.0`

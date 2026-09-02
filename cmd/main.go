@@ -210,6 +210,7 @@ func main() {
 	}
 	if err := (&controller.ApmeReconciler{
 		Client:      mgr.GetClient(),
+		APIReader:   mgr.GetAPIReader(),
 		Scheme:      mgr.GetScheme(),
 		HasRouteAPI: hasRoute,
 	}).SetupWithManager(mgr); err != nil {

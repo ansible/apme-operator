@@ -51,8 +51,6 @@ const (
 )
 
 // ApmeSpec defines the desired state of Apme.
-//
-// +kubebuilder:validation:XValidation:rule="!(has(self.components) && has(self.components.ui) && self.components.ui && has(self.exposure) && has(self.exposure.route) && self.exposure.route.enabled && (!has(self.exposure.route.host) || size(self.exposure.route.host) == 0))",message="exposure.route.host is required when UI and Route are enabled"
 type ApmeSpec struct {
 	// Version is the APME image tag (without a leading v). Defaults to 2026.8.10.
 	// +optional
@@ -181,7 +179,8 @@ type RouteSpec struct {
 	// Enabled defaults true. Use a pointer so false is distinguishable.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
-	// Host is required when UI and Route are enabled.
+	// Host is an optional custom Route hostname. When empty, OpenShift assigns
+	// a default host (requires routes/custom-host only when Host is set).
 	// +optional
 	Host string `json:"host,omitempty"`
 	// +optional

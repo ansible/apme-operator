@@ -20,6 +20,19 @@ The operator reconciles a namespaced `Apme` custom resource into the **Simple** 
 
 Requires `kubectl` (or `oc`) and a cluster. OpenShift is the primary target (Routes); Ingress works on vanilla Kubernetes.
 
+### Install from a release (preferred)
+
+```sh
+kubectl apply -f https://github.com/ansible/apme-operator/releases/latest/download/install.yaml
+
+kubectl create namespace apme --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n apme -f https://raw.githubusercontent.com/ansible/apme-operator/main/config/samples/apme_v1alpha1_apme.yaml
+```
+
+Pin a version with `…/releases/download/vX.Y.Z/install.yaml`. See the [user guide](docs/user-guide.md#install-the-operator).
+
+### Build and deploy from source
+
 ```sh
 export IMG=quay.io/$USER/apme-operator:dev
 make docker-build docker-push deploy IMG=$IMG
@@ -28,7 +41,7 @@ kubectl create namespace apme --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n apme -f config/samples/apme_v1alpha1_apme.yaml
 ```
 
-Edit `spec.exposure.route.host` in the sample to a hostname that resolves on your cluster before applying.
+Optionally set `spec.exposure.route.host` in the sample to a custom hostname (requires `routes/custom-host` on the operator SA, which the install manifests grant). Omit `host` to use the OpenShift default.
 
 Check status:
 
@@ -37,7 +50,7 @@ kubectl get apme -n apme
 kubectl get pods -n apme
 ```
 
-CRDs only: `make install`. Tear down: delete the `Apme` CR (owned objects GC), then `make undeploy` / `make uninstall`.
+CRDs only: `make install`. Tear down: delete the `Apme` CR (owned objects GC), then remove the install manifest or `make undeploy` / `make uninstall`.
 
 ## Documentation
 
