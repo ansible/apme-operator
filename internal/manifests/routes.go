@@ -5,9 +5,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// RouteDesiredHostAnnotation records the CR-desired Route host (may be empty).
+// Used to detect host intent changes without confusing OpenShift-assigned hosts.
+const RouteDesiredHostAnnotation = "apme.ansible.com/desired-host"
+
 func routeUnstructured(name, component, host, svc, path string, d resolve.Desired) *unstructured.Unstructured {
 	spec := map[string]interface{}{
-		"host": host,
 		"to": map[string]interface{}{
 			"kind":   "Service",
 			"name":   svc,
@@ -21,6 +24,10 @@ func routeUnstructured(name, component, host, svc, path string, d resolve.Desire
 			"insecureEdgeTerminationPolicy": d.RouteInsecureEdgeTerminationPolicy,
 		},
 	}
+	// Omit empty host so OpenShift can assign *.apps.<domain>.
+	if host != "" {
+		spec["host"] = host
+	}
 	if path != "" {
 		spec["path"] = path
 	}
@@ -30,11 +37,22 @@ func routeUnstructured(name, component, host, svc, path string, d resolve.Desire
 		"metadata": map[string]interface{}{
 			"name":      name,
 			"namespace": d.Namespace,
-			"labels":    labels(d, component),
+			"labels":    toUnstructuredStringMap(labels(d, component)),
+			"annotations": map[string]interface{}{
+				RouteDesiredHostAnnotation: host,
+			},
 		},
 		"spec": spec,
 	}}
 	return u
+}
+
+func toUnstructuredStringMap(in map[string]string) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // UIRoute is the UI Route at / when UI is on.

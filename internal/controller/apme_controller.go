@@ -43,6 +43,9 @@ const (
 // ApmeReconciler reconciles an Apme object.
 type ApmeReconciler struct {
 	client.Client
+	// APIReader is an uncached reader (manager GetAPIReader). Used for Pod
+	// diagnostics so listing Pods does not start a cluster-wide informer.
+	APIReader   client.Reader
 	Scheme      *runtime.Scheme
 	HasRouteAPI bool
 }
@@ -51,6 +54,7 @@ type ApmeReconciler struct {
 // +kubebuilder:rbac:groups=apme.ansible.com,resources=apmes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apme.ansible.com,resources=apmes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts;services;configmaps;secrets;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies;ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
@@ -153,12 +157,6 @@ func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apm
 	if d.UI {
 		objs = append(objs, manifests.UIService(d))
 	}
-	if d.RouteEnabled && r.hasRouteAPI() {
-		if d.UI {
-			objs = append(objs, manifests.UIRoute(d))
-		}
-		objs = append(objs, manifests.APIRoute(d))
-	}
 	if d.IngressEnabled {
 		objs = append(objs, manifests.Ingress(d))
 	}
@@ -170,7 +168,7 @@ func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apm
 			return err
 		}
 	}
-	return nil
+	return r.ensureRoutes(ctx, cr, d)
 }
 
 func (r *ApmeReconciler) fail(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired, err error) (ctrl.Result, error) {
@@ -281,19 +279,28 @@ func (r *ApmeReconciler) patchStatus(ctx context.Context, cr *apmev1alpha1.Apme,
 		set(condDatabaseReady, metav1.ConditionFalse, "Pending", dbMsg)
 	}
 
+	depReady, depMsg, imagePull := r.deploymentReady(ctx, d)
+
 	if leftoverPG {
 		set(condDegraded, metav1.ConditionTrue, "LeftoverManagedPostgres",
 			"connectionSecretRef is set but managed Postgres objects still exist; delete them manually")
+	} else if isRoutePermissionErr(recErr) {
+		set(condDegraded, metav1.ConditionTrue, "RoutePermissionDenied", recErr.Error())
 	} else if recErr != nil {
 		set(condDegraded, metav1.ConditionTrue, "ReconcileError", recErr.Error())
+	} else if imagePull {
+		set(condDegraded, metav1.ConditionTrue, "ImagePullError", depMsg)
 	} else {
 		set(condDegraded, metav1.ConditionFalse, "AsExpected", "no errors")
 	}
 
-	depReady, depMsg := r.deploymentReady(ctx, d)
 	if recErr != nil {
+		reason := "Error"
+		if isRoutePermissionErr(recErr) {
+			reason = "RoutePermissionDenied"
+		}
 		set(condProgressing, metav1.ConditionTrue, "Retrying", recErr.Error())
-		set(condReady, metav1.ConditionFalse, "Error", recErr.Error())
+		set(condReady, metav1.ConditionFalse, reason, recErr.Error())
 	} else if depReady && dbReady && !leftoverPG {
 		set(condProgressing, metav1.ConditionFalse, "Stable", "all owned objects ready")
 		set(condReady, metav1.ConditionTrue, "Available", "APME Simple topology is ready")
@@ -326,16 +333,70 @@ func (r *ApmeReconciler) databaseReady(ctx context.Context, d resolve.Desired) (
 	return false, "waiting for postgres replica"
 }
 
-func (r *ApmeReconciler) deploymentReady(ctx context.Context, d resolve.Desired) (bool, string) {
+func (r *ApmeReconciler) deploymentReady(ctx context.Context, d resolve.Desired) (bool, string, bool) {
 	dep := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, dep)
 	if err != nil {
-		return false, "deployment not found"
+		return false, "deployment not found", false
 	}
 	if dep.Status.ReadyReplicas >= 1 {
-		return true, "deployment ready"
+		return true, "deployment ready", false
 	}
-	return false, "waiting for APME deployment"
+	if msg := r.imagePullMessage(ctx, dep); msg != "" {
+		return false, msg, true
+	}
+	return false, "waiting for APME deployment", false
+}
+
+func (r *ApmeReconciler) imagePullMessage(ctx context.Context, dep *appsv1.Deployment) string {
+	if dep.Spec.Selector == nil || len(dep.Spec.Selector.MatchLabels) == 0 {
+		return ""
+	}
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	var pods corev1.PodList
+	if err := reader.List(ctx, &pods, client.InNamespace(dep.Namespace), client.MatchingLabels(dep.Spec.Selector.MatchLabels)); err != nil {
+		return ""
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		statuses := append([]corev1.ContainerStatus{}, pod.Status.InitContainerStatuses...)
+		statuses = append(statuses, pod.Status.ContainerStatuses...)
+		for _, cs := range statuses {
+			w := cs.State.Waiting
+			if w == nil {
+				continue
+			}
+			switch w.Reason {
+			case "ErrImagePull", "ImagePullBackOff", "InvalidImageName":
+				img := containerImage(pod, cs.Name)
+				if img == "" {
+					img = cs.Image
+				}
+				if w.Message != "" {
+					return fmt.Sprintf("%s: %s — %s", w.Reason, img, w.Message)
+				}
+				return fmt.Sprintf("%s: %s", w.Reason, img)
+			}
+		}
+	}
+	return ""
+}
+
+func containerImage(pod *corev1.Pod, name string) string {
+	for _, c := range pod.Spec.InitContainers {
+		if c.Name == name {
+			return c.Image
+		}
+	}
+	for _, c := range pod.Spec.Containers {
+		if c.Name == name {
+			return c.Image
+		}
+	}
+	return ""
 }
 
 func (r *ApmeReconciler) publicURL(ctx context.Context, d resolve.Desired) string {
@@ -380,5 +441,9 @@ func (r *ApmeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.NetworkPolicy{}).
 		Owns(&networkingv1.Ingress{}).
 		Named("apme")
+	if r.HasRouteAPI {
+		rt := newRoute()
+		b = b.Owns(rt)
+	}
 	return b.Complete(r)
 }

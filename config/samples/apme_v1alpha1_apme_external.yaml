@@ -13,6 +13,7 @@ spec:
   exposure:
     route:
       enabled: true
-      host: apme.apps.example.com
+      # Optional custom host; omit for OpenShift default.
+      # host: apme.apps.example.com
   abbenay:
     enabled: false
