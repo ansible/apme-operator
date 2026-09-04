@@ -316,12 +316,16 @@ func Abbenay(d resolve.Desired) corev1.Container {
 // InitDBCABundle merges the system CA bundle with the managed Postgres CA so
 // Gateway can use sslmode=verify-full without breaking outbound HTTPS trust.
 func InitDBCABundle(d resolve.Desired) corev1.Container {
+	// Use cat (not cp): system CA bundles are mode 0444, and cp preserves that,
+	// which makes the subsequent append fail and leaves a read-only file that
+	// also breaks init retries on the same emptyDir.
 	script := `set -e
 BUNDLE=/work/ca-bundle.crt
+rm -f "$BUNDLE"
 if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
-  cp /etc/pki/tls/certs/ca-bundle.crt "$BUNDLE"
+  cat /etc/pki/tls/certs/ca-bundle.crt > "$BUNDLE"
 elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-  cp /etc/ssl/certs/ca-certificates.crt "$BUNDLE"
+  cat /etc/ssl/certs/ca-certificates.crt > "$BUNDLE"
 else
   : > "$BUNDLE"
 fi
