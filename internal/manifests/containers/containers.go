@@ -232,7 +232,14 @@ func Gateway(d resolve.Desired) corev1.Container {
 	var mounts []corev1.VolumeMount
 	if d.GeneratePostgres {
 		// Managed Postgres: trust the operator/user CA while keeping system CAs via init-built bundle.
-		e = append(e, corev1.EnvVar{Name: "SSL_CERT_FILE", Value: "/etc/apme/db-ca/ca-bundle.crt"})
+		// SSL_CERT_FILE covers outbound HTTPS; PGSSLROOTCERT is what asyncpg/libpq use for
+		// sslmode=verify-full (SSL_CERT_FILE alone is ignored and asyncpg falls back to
+		// ~/.postgresql/root.crt, which does not exist in the Gateway image).
+		caBundle := "/etc/apme/db-ca/ca-bundle.crt"
+		e = append(e,
+			corev1.EnvVar{Name: "SSL_CERT_FILE", Value: caBundle},
+			corev1.EnvVar{Name: "PGSSLROOTCERT", Value: caBundle},
+		)
 		mounts = append(mounts, corev1.VolumeMount{Name: "db-ca-bundle", MountPath: "/etc/apme/db-ca", ReadOnly: true})
 	}
 	if d.Abbenay {
