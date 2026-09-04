@@ -80,6 +80,14 @@ var _ = Describe("Apme Controller", func() {
 		sec := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-postgres", Namespace: nn.Namespace}, sec)).To(Succeed())
 		Expect(sec.Data["database-url"]).NotTo(BeEmpty())
+		Expect(string(sec.Data["database-url"])).To(ContainSubstring("sslmode=verify-full"))
+		tlsSec := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-postgres-tls", Namespace: nn.Namespace}, tlsSec)).To(Succeed())
+		Expect(tlsSec.Data["tls.crt"]).NotTo(BeEmpty())
+		Expect(tlsSec.Data["tls.key"]).NotTo(BeEmpty())
+		Expect(tlsSec.Data["ca.crt"]).NotTo(BeEmpty())
+		cm := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-postgres-ssl", Namespace: nn.Namespace}, cm)).To(Succeed())
 
 		pvc := &corev1.PersistentVolumeClaim{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-gateway-data", Namespace: nn.Namespace}, pvc)

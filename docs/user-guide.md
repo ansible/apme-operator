@@ -65,7 +65,31 @@ Full schema: [`api/v1alpha1/apme_types.go`](../api/v1alpha1/apme_types.go) and t
 
 ### Managed (default)
 
-Leave `spec.database.connectionSecretRef` unset. The operator creates a single-replica Postgres StatefulSet, Service, Secret, PVC, and NetworkPolicy. Override image, storage, or resources under `spec.database.postgres`.
+Leave `spec.database.connectionSecretRef` unset. The operator creates a single-replica Postgres StatefulSet, Service, credentials Secret, TLS Secret, SSL ConfigMap, PVC, and NetworkPolicy. Managed Postgres always serves TLS so the Gateway can connect with `sslmode=verify-full` to the in-cluster Service DNS name.
+
+Override image, storage, or resources under `spec.database.postgres`.
+
+#### Postgres TLS certificates
+
+By default the operator generates a CA and server certificate into `{name}-postgres-tls` (`tls.crt`, `tls.key`, `ca.crt`). To bring your own certificates (for example from cert-manager):
+
+```yaml
+spec:
+  database:
+    postgres:
+      tls:
+        secretName: my-postgres-tls
+```
+
+The Secret must be `kubernetes.io/tls` (or opaque) with:
+
+| Key | Purpose |
+|-----|---------|
+| `tls.crt` | Postgres server certificate |
+| `tls.key` | Postgres server private key |
+| `ca.crt` | CA that signed `tls.crt` (Gateway trusts this) |
+
+Server certificates must include SANs for the managed Service DNS names, for example `apme-postgres`, `apme-postgres.<namespace>`, `apme-postgres.<namespace>.svc`, and `apme-postgres.<namespace>.svc.cluster.local`.
 
 ### External
 

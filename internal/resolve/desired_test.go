@@ -24,6 +24,9 @@ func TestFromManagedDefaults(t *testing.T) {
 	if d.DatabaseSecretName != "apme-postgres" {
 		t.Fatalf("secret=%s", d.DatabaseSecretName)
 	}
+	if !d.GeneratePostgresTLS || d.PostgresTLSSecretName != "apme-postgres-tls" {
+		t.Fatalf("tls generate=%v secret=%s", d.GeneratePostgresTLS, d.PostgresTLSSecretName)
+	}
 }
 
 func TestFromExternal(t *testing.T) {

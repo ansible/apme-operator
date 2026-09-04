@@ -27,10 +27,11 @@ func NewSecret(d resolve.Desired) (*corev1.Secret, error) {
 	}
 	host := fmt.Sprintf("%s-postgres.%s.svc", d.Name, d.Namespace)
 	u := &url.URL{
-		Scheme: "postgresql+asyncpg",
-		User:   url.UserPassword(pgUser, pw),
-		Host:   fmt.Sprintf("%s:5432", host),
-		Path:   "/" + pgDB,
+		Scheme:   "postgresql+asyncpg",
+		User:     url.UserPassword(pgUser, pw),
+		Host:     fmt.Sprintf("%s:5432", host),
+		Path:     "/" + pgDB,
+		RawQuery: "sslmode=verify-full",
 	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
@@ -60,6 +61,18 @@ func randomPassword(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b)[:n], nil
+}
+
+// WithVerifyFullTLS returns databaseURL with sslmode=verify-full set (preserving other query params).
+func WithVerifyFullTLS(databaseURL string) (string, error) {
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("sslmode", "verify-full")
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func secretEnv(name, secret, key string) corev1.EnvVar {
@@ -110,6 +123,18 @@ func StatefulSet(d resolve.Desired) *appsv1.StatefulSet {
 				Spec: corev1.PodSpec{
 					SecurityContext:  &corev1.PodSecurityContext{},
 					ImagePullSecrets: d.PullSecrets,
+					InitContainers: []corev1.Container{{
+						Name:            "postgres-tls-perms",
+						Image:           d.PostgresImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command: []string{"/bin/sh", "-c",
+							"cp /tls-src/tls.crt /tls-src/tls.key /certs/ && chmod 600 /certs/tls.key && chmod 644 /certs/tls.crt",
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: "postgres-tls-src", MountPath: "/tls-src", ReadOnly: true},
+							{Name: "postgres-certs", MountPath: "/certs"},
+						},
+					}},
 					Containers: []corev1.Container{{
 						Name:  "postgres",
 						Image: d.PostgresImage,
@@ -119,13 +144,34 @@ func StatefulSet(d resolve.Desired) *appsv1.StatefulSet {
 							secretEnv("POSTGRESQL_PASSWORD", d.DatabaseSecretName, "password"),
 							secretEnv("POSTGRESQL_DATABASE", d.DatabaseSecretName, "database"),
 						},
-						VolumeMounts: []corev1.VolumeMount{{Name: "data", MountPath: "/var/lib/pgsql/data"}},
-						Resources:    d.PostgresResources,
+						VolumeMounts: []corev1.VolumeMount{
+							{Name: "data", MountPath: "/var/lib/pgsql/data"},
+							{Name: "postgres-certs", MountPath: "/opt/app-root/src/certs", ReadOnly: true},
+							{Name: "postgres-ssl-cfg", MountPath: "/opt/app-root/src/postgresql-cfg", ReadOnly: true},
+						},
+						Resources: d.PostgresResources,
 						ReadinessProbe: &corev1.Probe{
 							ProbeHandler:  corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: port}},
 							PeriodSeconds: 10,
 						},
 					}},
+					Volumes: []corev1.Volume{
+						{
+							Name: "postgres-tls-src",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{SecretName: d.PostgresTLSSecretName},
+							},
+						},
+						{Name: "postgres-certs", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+						{
+							Name: "postgres-ssl-cfg",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: d.Name + "-postgres-ssl"},
+								},
+							},
+						},
+					},
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
