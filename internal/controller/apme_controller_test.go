@@ -80,7 +80,8 @@ var _ = Describe("Apme Controller", func() {
 		sec := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-postgres", Namespace: nn.Namespace}, sec)).To(Succeed())
 		Expect(sec.Data["database-url"]).NotTo(BeEmpty())
-		Expect(string(sec.Data["database-url"])).To(ContainSubstring("sslmode=verify-full"))
+		Expect(string(sec.Data["database-url"])).To(ContainSubstring("ssl=verify-full"))
+		Expect(string(sec.Data["database-url"])).NotTo(ContainSubstring("sslmode="))
 		tlsSec := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-postgres-tls", Namespace: nn.Namespace}, tlsSec)).To(Succeed())
 		Expect(tlsSec.Data["tls.crt"]).NotTo(BeEmpty())

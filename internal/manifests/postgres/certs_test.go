@@ -61,8 +61,11 @@ func TestWithVerifyFullTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, "sslmode=verify-full") {
-		t.Fatalf("expected sslmode=verify-full in %q", got)
+	if !strings.Contains(got, "ssl=verify-full") {
+		t.Fatalf("expected ssl=verify-full in %q", got)
+	}
+	if strings.Contains(got, "sslmode=") {
+		t.Fatalf("did not expect sslmode in %q", got)
 	}
 	got2, err := WithVerifyFullTLS(got)
 	if err != nil {
@@ -70,6 +73,13 @@ func TestWithVerifyFullTLS(t *testing.T) {
 	}
 	if got2 != got {
 		t.Fatalf("idempotent expected, got %q vs %q", got2, got)
+	}
+	fromLibpq, err := WithVerifyFullTLS("postgresql+asyncpg://apme:x@apme-postgres.apme-dev.svc:5432/apme?sslmode=verify-full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fromLibpq, "ssl=verify-full") || strings.Contains(fromLibpq, "sslmode=") {
+		t.Fatalf("expected sslmode remapped to ssl only, got %q", fromLibpq)
 	}
 }
 
@@ -81,7 +91,10 @@ func TestNewSecretIncludesVerifyFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	u := sec.StringData["database-url"]
-	if !strings.Contains(u, "sslmode=verify-full") {
-		t.Fatalf("url missing sslmode: %s", u)
+	if !strings.Contains(u, "ssl=verify-full") {
+		t.Fatalf("url missing ssl=: %s", u)
+	}
+	if strings.Contains(u, "sslmode=") {
+		t.Fatalf("did not expect sslmode in %s", u)
 	}
 }

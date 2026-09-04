@@ -27,11 +27,14 @@ func NewSecret(d resolve.Desired) (*corev1.Secret, error) {
 	}
 	host := fmt.Sprintf("%s-postgres.%s.svc", d.Name, d.Namespace)
 	u := &url.URL{
-		Scheme:   "postgresql+asyncpg",
-		User:     url.UserPassword(pgUser, pw),
-		Host:     fmt.Sprintf("%s:5432", host),
-		Path:     "/" + pgDB,
-		RawQuery: "sslmode=verify-full",
+		Scheme: "postgresql+asyncpg",
+		User:   url.UserPassword(pgUser, pw),
+		Host:   fmt.Sprintf("%s:5432", host),
+		Path:   "/" + pgDB,
+		// Use asyncpg's ssl= query param (not libpq sslmode=). The APME gateway
+		// remaps sslmode→ssl via SQLAlchemy URL mutation; str(URL) redacts the
+		// password to "***" and breaks authentication. ssl=verify-full needs no remap.
+		RawQuery: "ssl=verify-full",
 	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
@@ -63,14 +66,17 @@ func randomPassword(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b)[:n], nil
 }
 
-// WithVerifyFullTLS returns databaseURL with sslmode=verify-full set (preserving other query params).
+// WithVerifyFullTLS returns databaseURL with ssl=verify-full set (preserving other query params).
+// Prefer asyncpg's ssl= over libpq sslmode= so APME gateway URL normalization is a no-op
+// (that path uses str(URL), which redacts passwords under SQLAlchemy 2).
 func WithVerifyFullTLS(databaseURL string) (string, error) {
 	u, err := url.Parse(databaseURL)
 	if err != nil {
 		return "", err
 	}
 	q := u.Query()
-	q.Set("sslmode", "verify-full")
+	q.Del("sslmode")
+	q.Set("ssl", "verify-full")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
