@@ -44,6 +44,9 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	}
 
 	var inits []corev1.Container
+	if d.GeneratePostgres {
+		inits = append(inits, containers.InitDBCABundle(d))
+	}
 	if d.UI {
 		inits = append(inits, containers.InitNginx(d))
 	}
@@ -54,6 +57,20 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	vols := []corev1.Volume{
 		pvcVol("sessions", d.Name+"-sessions"),
 		pvcVol("proxy-cache", d.Name+"-proxy-cache"),
+	}
+	if d.GeneratePostgres {
+		vols = append(vols,
+			corev1.Volume{
+				Name: "db-ca",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: d.PostgresTLSSecretName,
+						Items:      []corev1.KeyToPath{{Key: "ca.crt", Path: "ca.crt"}},
+					},
+				},
+			},
+			emptyVol("db-ca-bundle"),
+		)
 	}
 	if d.UI {
 		vols = append(vols,
