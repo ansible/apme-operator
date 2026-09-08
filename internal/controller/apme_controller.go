@@ -112,7 +112,13 @@ func (r *ApmeReconciler) ensureDatabase(ctx context.Context, cr *apmev1alpha1.Ap
 	if d.DatabaseMode != apmev1alpha1.DatabaseManaged {
 		return r.managedPostgresExists(ctx, d), nil
 	}
+	if err := r.ensurePostgresTLS(ctx, cr, d); err != nil {
+		return false, err
+	}
 	if err := r.ensurePostgresSecret(ctx, cr, d); err != nil {
+		return false, err
+	}
+	if err := r.apply(ctx, cr, postgres.SSLConfigMap(d)); err != nil {
 		return false, err
 	}
 	if err := r.apply(ctx, cr, postgres.StatefulSet(d)); err != nil {
@@ -148,7 +154,7 @@ func (r *ApmeReconciler) ensureAbbenay(ctx context.Context, cr *apmev1alpha1.Apm
 }
 
 func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) error {
-	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.AbbenayTokenName, d.Version)
+	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.PostgresTLSSecretName, d.AbbenayTokenName, d.Version)
 	objs := []client.Object{
 		manifests.Deployment(d, sum),
 		manifests.EngineService(d),
@@ -199,12 +205,56 @@ func (r *ApmeReconciler) ensurePostgresSecret(ctx context.Context, owner *apmev1
 	existing := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: d.DatabaseSecretName, Namespace: d.Namespace}, existing)
 	if err == nil {
-		return nil
+		return r.ensurePostgresURLTLS(ctx, existing)
 	}
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
 	sec, err := postgres.NewSecret(d)
+	if err != nil {
+		return err
+	}
+	if err := controllerutil.SetControllerReference(owner, sec, r.Scheme); err != nil {
+		return err
+	}
+	return r.Create(ctx, sec)
+}
+
+func (r *ApmeReconciler) ensurePostgresURLTLS(ctx context.Context, sec *corev1.Secret) error {
+	raw, ok := sec.Data["database-url"]
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	updated, err := postgres.WithVerifyFullTLS(string(raw))
+	if err != nil {
+		return err
+	}
+	if updated == string(raw) {
+		return nil
+	}
+	if sec.StringData == nil {
+		sec.StringData = map[string]string{}
+	}
+	sec.StringData["database-url"] = updated
+	return r.Update(ctx, sec)
+}
+
+func (r *ApmeReconciler) ensurePostgresTLS(ctx context.Context, owner *apmev1alpha1.Apme, d resolve.Desired) error {
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.PostgresTLSSecretName, Namespace: d.Namespace}, existing)
+	if err == nil {
+		if !postgres.HasTLSMaterial(existing) {
+			return fmt.Errorf("postgres TLS secret %q must contain tls.crt, tls.key, and ca.crt", d.PostgresTLSSecretName)
+		}
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	if !d.GeneratePostgresTLS {
+		return fmt.Errorf("postgres TLS secret %q not found", d.PostgresTLSSecretName)
+	}
+	sec, err := postgres.NewTLSSecret(d)
 	if err != nil {
 		return err
 	}

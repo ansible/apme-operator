@@ -44,6 +44,10 @@ type Desired struct {
 	PostgresSize         resource.Quantity
 	PostgresStorageClass string
 	PostgresResources    corev1.ResourceRequirements
+	// PostgresTLSSecretName is the Secret with tls.crt/tls.key/ca.crt for managed Postgres.
+	PostgresTLSSecretName string
+	// GeneratePostgresTLS is true when the operator should create/own PostgresTLSSecretName.
+	GeneratePostgresTLS bool
 
 	SessionsSize           resource.Quantity
 	SessionsStorageClass   string
@@ -155,6 +159,11 @@ func From(cr *apmev1alpha1.Apme) Desired {
 		d.PostgresSize = qtyOr(cr.Spec.Database.Postgres.Storage.Size, "10Gi")
 		d.PostgresStorageClass = cr.Spec.Database.Postgres.Storage.StorageClass
 		d.PostgresResources = cr.Spec.Database.Postgres.Resources
+		d.PostgresTLSSecretName = cr.Spec.Database.Postgres.TLS.SecretName
+		if d.PostgresTLSSecretName == "" {
+			d.GeneratePostgresTLS = true
+			d.PostgresTLSSecretName = cr.Name + "-postgres-tls"
+		}
 	}
 
 	if d.Abbenay {

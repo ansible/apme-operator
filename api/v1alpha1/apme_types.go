@@ -148,6 +148,22 @@ type PostgresSpec struct {
 	// Resources for the Postgres container.
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// TLS configures server certificates for managed Postgres.
+	// Certificate-validated TLS is always enabled in Managed mode so the
+	// Gateway can use sslmode=verify-full against the in-cluster Service DNS name.
+	// +optional
+	TLS PostgresTLSSpec `json:"tls,omitempty"`
+}
+
+// PostgresTLSSpec selects operator-generated or user-provided Postgres server certificates.
+type PostgresTLSSpec struct {
+	// SecretName references a Secret with keys tls.crt, tls.key, and ca.crt.
+	// The Secret type should be kubernetes.io/tls (ca.crt is an additional key).
+	// When empty, the operator generates and owns {metadata.name}-postgres-tls.
+	// Provided certificates must include SANs for the managed Service DNS names
+	// (for example apme-postgres.ns.svc).
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // StorageSpec is APME pod PVC sizes for sessions and Galaxy proxy cache.

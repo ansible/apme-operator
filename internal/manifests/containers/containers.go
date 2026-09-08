@@ -230,6 +230,18 @@ func Gateway(d resolve.Desired) corev1.Container {
 		e = append(e, corev1.EnvVar{Name: "DEP_AUDIT_GRPC_ADDRESS", Value: "127.0.0.1:50059"})
 	}
 	var mounts []corev1.VolumeMount
+	if d.GeneratePostgres {
+		// Managed Postgres: trust the operator/user CA while keeping system CAs via init-built bundle.
+		// SSL_CERT_FILE covers outbound HTTPS; PGSSLROOTCERT is what asyncpg/libpq use for
+		// sslmode=verify-full (SSL_CERT_FILE alone is ignored and asyncpg falls back to
+		// ~/.postgresql/root.crt, which does not exist in the Gateway image).
+		caBundle := "/etc/apme/db-ca/ca-bundle.crt"
+		e = append(e,
+			corev1.EnvVar{Name: "SSL_CERT_FILE", Value: caBundle},
+			corev1.EnvVar{Name: "PGSSLROOTCERT", Value: caBundle},
+		)
+		mounts = append(mounts, corev1.VolumeMount{Name: "db-ca-bundle", MountPath: "/etc/apme/db-ca", ReadOnly: true})
+	}
 	if d.Abbenay {
 		e = append(e,
 			corev1.EnvVar{Name: "APME_ABBENAY_HTTP_URL", Value: "http://127.0.0.1:8787"},
@@ -312,6 +324,37 @@ func Abbenay(d resolve.Desired) corev1.Container {
 }
 
 // InitNginx copies stock nginx conf into a writable emptyDir.
+// InitDBCABundle merges the system CA bundle with the managed Postgres CA so
+// Gateway can use sslmode=verify-full without breaking outbound HTTPS trust.
+func InitDBCABundle(d resolve.Desired) corev1.Container {
+	// Use cat (not cp): system CA bundles are mode 0444, and cp preserves that,
+	// which makes the subsequent append fail and leaves a read-only file that
+	// also breaks init retries on the same emptyDir.
+	script := `set -e
+BUNDLE=/work/ca-bundle.crt
+rm -f "$BUNDLE"
+if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
+  cat /etc/pki/tls/certs/ca-bundle.crt > "$BUNDLE"
+elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+  cat /etc/ssl/certs/ca-certificates.crt > "$BUNDLE"
+else
+  : > "$BUNDLE"
+fi
+cat /db-ca/ca.crt >> "$BUNDLE"
+`
+	return corev1.Container{
+		Name:            "init-db-ca",
+		Image:           d.Image("gateway"),
+		ImagePullPolicy: pull(d),
+		SecurityContext: emptySC(),
+		Command:         []string{"/bin/sh", "-c", script},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "db-ca", MountPath: "/db-ca", ReadOnly: true},
+			{Name: "db-ca-bundle", MountPath: "/work"},
+		},
+	}
+}
+
 func InitNginx(d resolve.Desired) corev1.Container {
 	return corev1.Container{
 		Name:            "init-nginx-conf",
