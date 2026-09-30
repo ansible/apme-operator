@@ -168,7 +168,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 PLATFORM ?=
 ifneq ($(strip $(PLATFORM)),)
-DOCKER_BUILD_FLAGS += --platform=$(PLATFORM)
+DOCKER_BUILD_FLAGS += --platform=$(strip $(PLATFORM))
 endif
 
 .PHONY: docker-build

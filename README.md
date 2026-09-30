@@ -45,7 +45,8 @@ export IMG=quay.io/$USER/apme-operator:dev
 make docker-buildx IMG=$IMG
 make deploy IMG=$IMG
 
-# Or single-arch native / cross-build (BuildKit), e.g. on an amd64 host for an ARM cluster:
+# Or single-arch (BuildKit) only when every node shares one arch,
+# e.g. amd64 host building for an all-ARM single-arch cluster:
 # make docker-build PLATFORM=linux/arm64 docker-push deploy IMG=$IMG
 ```
 

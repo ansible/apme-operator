@@ -23,13 +23,14 @@ make docker-buildx IMG=$IMG
 make deploy IMG=$IMG
 ```
 
-Single-arch alternatives:
+Single-arch alternatives (single-arch clusters only — mixed clusters need
+`docker-buildx` above, since a single-arch tag CrashLoops on the other arch):
 
 ```sh
 # Native host arch
 make docker-build docker-push deploy IMG=$IMG
 
-# Cross-build one platform (BuildKit), e.g. amd64 host → ARM cluster
+# Cross-build one platform (BuildKit), e.g. amd64 host → all-ARM single-arch cluster
 make docker-build PLATFORM=linux/arm64 docker-push deploy IMG=$IMG
 ```
 
