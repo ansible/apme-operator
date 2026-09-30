@@ -137,6 +137,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify multi-arch manifest
+        env:
+          IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${IMG}" | tee /tmp/imagetools.txt
+          grep -q 'linux/amd64' /tmp/imagetools.txt
+          grep -q 'linux/arm64' /tmp/imagetools.txt
+
+      - name: Smoke-test arm64 manager binary
+        env:
+          IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Prove the arm64 manifest contains an aarch64 ELF (not a mislabeled amd64 binary).
+          cid="$(docker create --platform=linux/arm64 "${IMG}")"
+          trap 'docker rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
+          docker cp "${cid}:/manager" /tmp/manager-arm64
+          file /tmp/manager-arm64 | tee /tmp/manager-arm64.file
+          grep -Ei 'ARM aarch64|aarch64|ARM64' /tmp/manager-arm64.file
+
       - name: Build install.yaml
         env:
           IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}

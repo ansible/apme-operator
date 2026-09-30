@@ -60,9 +60,9 @@ commands developers run locally.
 | Target | What it runs | When to use |
 |--------|--------------|-------------|
 | `make build` | `go build` → `bin/manager` | Quick local compile |
-| `make docker-build` | `docker build` / `podman build` | Local image (`IMG=...`) |
+| `make docker-build` | `docker build` / `podman build` (`PLATFORM=` optional) | Local single-arch image (`IMG=...`) |
 | `make docker-push` | Push `IMG` | After docker-build |
-| `make docker-buildx` | Multi-arch buildx push | Release images |
+| `make docker-buildx` | Multi-arch buildx push (`PLATFORMS=linux/amd64,linux/arm64`) | Release / ARM or mixed clusters |
 | `make build-installer` | kustomize → `dist/install.yaml` | Offline install bundle |
 
 ### Cluster deploy (inner loop)

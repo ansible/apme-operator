@@ -40,7 +40,8 @@ logic lives in the `Makefile`; CI invokes `make` or the same underlying tools.
 ## Release workflow
 
 Publishes `ghcr.io/<owner>/apme-operator` (linux/amd64 + linux/arm64) and a GitHub
-Release with `dist/install.yaml`. Also pushes to
+Release with `dist/install.yaml`. After push, the workflow fails if the index
+lacks either arch or the arm64 image binary is not an aarch64 ELF. Also pushes to
 `quay.io/<QUAY_NAMESPACE>/apme-operator` when `QUAY_USERNAME` /
 `QUAY_PASSWORD` secrets are set (`QUAY_NAMESPACE` defaults to the repo owner;
 override with the `QUAY_NAMESPACE` Actions variable).

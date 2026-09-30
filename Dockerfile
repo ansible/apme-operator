@@ -1,4 +1,7 @@
-# Build the manager binary
+# Build the manager binary.
+# Release and docker-buildx set TARGETARCH per platform (linux/amd64 + linux/arm64).
+# A bare `docker build` / `make docker-build` without PLATFORM uses the host arch only —
+# an amd64-only image will CrashLoop on ARM nodes (exec format error).
 FROM registry.access.redhat.com/ubi9/go-toolset:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
@@ -18,7 +21,8 @@ COPY --chown=1001:0 cmd/main.go cmd/main.go
 COPY --chown=1001:0 api/ api/
 COPY --chown=1001:0 internal/ internal/
 
-# GOARCH has no default so the binary matches the host (or build.openshift.io) arch.
+# GOARCH has no default so the binary matches the host (or build.openshift.io) arch
+# when TARGETARCH is unset; buildx injects TARGETARCH for each platform.
 RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # UBI Minimal runtime for OpenShift (restricted-v2 / arbitrary UID).

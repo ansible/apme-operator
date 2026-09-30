@@ -13,10 +13,27 @@ Operator SDK **v1.42.3** was used to scaffold. Day-to-day work is via `make` (se
 
 ## Build and deploy
 
+Supported manager image architectures: **linux/amd64** and **linux/arm64** (same as release).
+
+`make docker-build` is single-arch (host or `PLATFORM`). Use that when the build host matches the cluster. For ARM or mixed clusters — or whenever the cluster arch may differ from the build host — use `docker-buildx` so the registry tag is a multi-arch index:
+
 ```sh
 export IMG=quay.io/$USER/apme-operator:dev
-make docker-build docker-push deploy IMG=$IMG
+make docker-buildx IMG=$IMG
+make deploy IMG=$IMG
 ```
+
+Single-arch alternatives:
+
+```sh
+# Native host arch
+make docker-build docker-push deploy IMG=$IMG
+
+# Cross-build one platform (BuildKit), e.g. amd64 host → ARM cluster
+make docker-build PLATFORM=linux/arm64 docker-push deploy IMG=$IMG
+```
+
+Private mirrors must copy the **full multi-arch index**, not one platform digest; an amd64-only retag fails on ARM with `exec format error`.
 
 Install CRDs only: `make install`.
 
@@ -39,6 +56,8 @@ make run
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `IMG` | `controller:latest` | Operator image for build/deploy |
+| `PLATFORM` | (unset) | Optional single platform for `docker-build` (e.g. `linux/arm64`) |
+| `PLATFORMS` | `linux/amd64,linux/arm64` | Platforms for `docker-buildx` (matches release) |
 | `CONTAINER_TOOL` | `docker` | Image build/push tool |
 | `NAMESPACE` (`operator.mk`) | `apme` | Namespace for the sample CR |
 | `DEV_CR` (`operator.mk`) | `config/samples/apme_v1alpha1_apme.yaml` | CR applied by `operator.mk deploy` |
@@ -84,10 +103,10 @@ kubectl apply -f https://github.com/ansible/apme-operator/releases/latest/downlo
 
 1. Bump `DefaultVersion` (and samples/docs) when adopting a new APME tag.
 2. Tag the repo: `git tag v0.1.0 && git push upstream v0.1.0`
-3. `.github/workflows/release.yml` builds `linux/amd64` + `linux/arm64`, pushes
-   to `ghcr.io/<owner>/apme-operator`, attaches `dist/install.yaml` to a GitHub
-   Release, and mirrors to Quay when `QUAY_USERNAME` / `QUAY_PASSWORD` are
-   configured.
+3. `.github/workflows/release.yml` builds `linux/amd64` + `linux/arm64`, verifies
+   both arches are in the pushed index, pushes to `ghcr.io/<owner>/apme-operator`,
+   attaches `dist/install.yaml` to a GitHub Release, and mirrors to Quay when
+   `QUAY_USERNAME` / `QUAY_PASSWORD` are configured.
 
 Local equivalent:
 
