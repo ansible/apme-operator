@@ -137,6 +137,41 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify multi-arch manifest
+        env:
+          IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}
+          QUAY_IMG: ${{ env.QUAY_REGISTRY }}/${{ steps.quay.outputs.ns }}/apme-operator:${{ steps.tag.outputs.version }}
+          QUAY_ENABLED: ${{ steps.quay.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          # NOTE: push-then-verify is required — imagetools inspects the registry,
+          # so the tags already exist when these checks run. A failure here fails
+          # the job before install.yaml/Release publication; delete the broken
+          # version tags and re-push before retrying the release.
+          docker buildx imagetools inspect "${IMG}" | tee /tmp/imagetools.txt
+          grep -q 'linux/amd64' /tmp/imagetools.txt
+          grep -q 'linux/arm64' /tmp/imagetools.txt
+          if [[ "${QUAY_ENABLED}" == "true" ]]; then
+            docker buildx imagetools inspect "${QUAY_IMG}" | tee /tmp/imagetools-quay.txt
+            grep -q 'linux/amd64' /tmp/imagetools-quay.txt
+            grep -q 'linux/arm64' /tmp/imagetools-quay.txt
+          fi
+
+      - name: Smoke-test arm64 manager binary
+        env:
+          IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Prove the arm64 manifest contains an aarch64 ELF (not a mislabeled amd64 binary).
+          # NOTE: use a neutral filename with `file -b` so the assertion cannot
+          # match its own path: `file <path>` prepends "<path>:" and the old
+          # /tmp/manager-arm64 path plus a bare ARM64 alternative always matched.
+          cid="$(docker create --platform=linux/arm64 "${IMG}")"
+          trap 'docker rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
+          docker cp "${cid}:/manager" /tmp/manager-check
+          file -b /tmp/manager-check | tee /tmp/manager-check.file
+          grep -Ei 'ARM aarch64|aarch64' /tmp/manager-check.file
+
       - name: Build install.yaml
         env:
           IMG: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}:${{ steps.tag.outputs.version }}

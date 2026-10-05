@@ -22,6 +22,8 @@ Requires `kubectl` (or `oc`) and a cluster. OpenShift is the primary target (Rou
 
 ### Install from a release (preferred)
 
+Release images are multi-arch (`linux/amd64` + `linux/arm64`). Prefer this path on any cluster architecture.
+
 ```sh
 kubectl apply -f https://github.com/ansible/apme-operator/releases/latest/download/install.yaml
 
@@ -31,12 +33,24 @@ kubectl apply -n apme -f https://raw.githubusercontent.com/ansible/apme-operator
 
 Pin a version with `…/releases/download/vX.Y.Z/install.yaml`. See the [user guide](docs/user-guide.md#install-the-operator).
 
+If you mirror the operator image to a private registry, copy the **full multi-arch index** (all platforms), not a single platform digest — an amd64-only retag CrashLoops on ARM nodes with `exec format error`.
+
 ### Build and deploy from source
+
+`make docker-build` produces a **single-arch** image for the host (or `PLATFORM`). For ARM or mixed clusters, publish a multi-arch tag with `docker-buildx` instead:
 
 ```sh
 export IMG=quay.io/$USER/apme-operator:dev
-make docker-build docker-push deploy IMG=$IMG
+# Multi-arch (amd64 + arm64) — required when the cluster arch may differ from the build host:
+make docker-buildx IMG=$IMG
+make deploy IMG=$IMG
 
+# Or single-arch (BuildKit) only when every node shares one arch,
+# e.g. amd64 host building for an all-ARM single-arch cluster:
+# make docker-build PLATFORM=linux/arm64 docker-push deploy IMG=$IMG
+```
+
+```sh
 kubectl create namespace apme --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n apme -f config/samples/apme_v1alpha1_apme.yaml
 ```
