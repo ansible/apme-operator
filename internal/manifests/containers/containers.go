@@ -1,6 +1,9 @@
 package containers
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -83,6 +86,12 @@ func Engine(d resolve.Desired) corev1.Container {
 	}
 	if d.DepAudit {
 		e = append(e, corev1.EnvVar{Name: "DEP_AUDIT_GRPC_ADDRESS", Value: "127.0.0.1:50059"})
+	}
+	for _, p := range d.Plugins {
+		e = append(e, corev1.EnvVar{
+			Name:  "APME_PLUGIN_" + strings.ToUpper(p.Name) + "_ADDRESS",
+			Value: fmt.Sprintf("127.0.0.1:%d", p.Port),
+		})
 	}
 	mounts := []corev1.VolumeMount{{Name: "sessions", MountPath: "/sessions"}}
 	if d.Abbenay {
@@ -197,6 +206,36 @@ func DepAudit(d resolve.Desired) corev1.Container {
 		VolumeMounts:    []corev1.VolumeMount{{Name: "sessions", MountPath: "/sessions", ReadOnly: ro}},
 		Resources:       resources(d),
 	}
+}
+
+// PluginConfigVolumeName is the Deployment volume name for a plugin ConfigMap.
+func PluginConfigVolumeName(name string) string {
+	return "plugin-" + name + "-config"
+}
+
+// Plugin is a third-party Plugin sidecar (org-supplied image).
+func Plugin(d resolve.Desired, p resolve.ResolvedPlugin) corev1.Container {
+	c := corev1.Container{
+		Name:            "plugin-" + p.Name,
+		Image:           p.Image,
+		ImagePullPolicy: pull(d),
+		SecurityContext: emptySC(),
+		Env: withProxy(env(
+			"APME_PLUGIN_LISTEN", fmt.Sprintf("0.0.0.0:%d", p.Port),
+		), d),
+		ReadinessProbe: tcpProbe(p.Port, 5, 10),
+		LivenessProbe:  tcpProbe(p.Port, 15, 30),
+		Resources:      resources(d),
+	}
+	if p.ConfigMapName != "" {
+		ro := true
+		c.VolumeMounts = []corev1.VolumeMount{{
+			Name:      PluginConfigVolumeName(p.Name),
+			MountPath: "/etc/apme-plugin",
+			ReadOnly:  ro,
+		}}
+	}
+	return c
 }
 
 // GalaxyProxy serves PEP 503 wheels.

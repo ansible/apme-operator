@@ -49,6 +49,24 @@ func hasContainer(dep *appsv1.Deployment, name string) bool {
 	return false
 }
 
+func containerByName(dep *appsv1.Deployment, name string) *corev1.Container {
+	for i := range dep.Spec.Template.Spec.Containers {
+		if dep.Spec.Template.Spec.Containers[i].Name == name {
+			return &dep.Spec.Template.Spec.Containers[i]
+		}
+	}
+	return &corev1.Container{}
+}
+
+func envValue(env []corev1.EnvVar, name string) string {
+	for _, e := range env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	return ""
+}
+
 var _ = Describe("Apme Controller", func() {
 	ctx := context.Background()
 
@@ -200,6 +218,100 @@ var _ = Describe("Apme Controller", func() {
 		got := &apmev1alpha1.Apme{}
 		Expect(k8sClient.Get(ctx, nn, got)).To(Succeed())
 		Expect(got.Status.Database).To(Equal(apmev1alpha1.DatabaseExternal))
+	})
+
+	It("injects plugin sidecars and Engine env from spec.plugins", func() {
+		nn := types.NamespacedName{Name: "apme-plugins", Namespace: "default"}
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "orgpolicy-data", Namespace: nn.Namespace},
+			Data:       map[string]string{"policy.yaml": "rules: []\n"},
+		}
+		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+		cr := &apmev1alpha1.Apme{
+			ObjectMeta: metav1.ObjectMeta{Name: nn.Name, Namespace: nn.Namespace},
+			Spec: apmev1alpha1.ApmeSpec{
+				Exposure: apmev1alpha1.ExposureSpec{Route: apmev1alpha1.RouteSpec{Enabled: boolPtr(false)}},
+				Plugins: []apmev1alpha1.PluginSpec{
+					{
+						Name:         "orgpolicy",
+						Image:        "registry.example.com/apme-plugin-orgpolicy:1.0",
+						ConfigMapRef: apmev1alpha1.LocalObjectRef{Name: "orgpolicy-data"},
+					},
+					{Name: "secscan", Image: "registry.example.com/apme-plugin-secscan:0.1", Port: 50110},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+		r := newReconciler()
+		reconcileN(ctx, r, nn, 1)
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		Expect(hasContainer(dep, "plugin-orgpolicy")).To(BeTrue())
+		Expect(hasContainer(dep, "plugin-secscan")).To(BeTrue())
+
+		var engine *corev1.Container
+		var orgpolicy *corev1.Container
+		var opa *corev1.Container
+		for i := range dep.Spec.Template.Spec.Containers {
+			c := &dep.Spec.Template.Spec.Containers[i]
+			switch c.Name {
+			case "engine":
+				engine = c
+			case "plugin-orgpolicy":
+				orgpolicy = c
+			case "opa":
+				opa = c
+			}
+		}
+		Expect(engine).NotTo(BeNil())
+		Expect(orgpolicy).NotTo(BeNil())
+		Expect(opa).NotTo(BeNil())
+
+		Expect(envValue(engine.Env, "APME_PLUGIN_ORGPOLICY_ADDRESS")).To(Equal("127.0.0.1:50100"))
+		Expect(envValue(engine.Env, "APME_PLUGIN_SECSCAN_ADDRESS")).To(Equal("127.0.0.1:50110"))
+		Expect(orgpolicy.Image).To(Equal("registry.example.com/apme-plugin-orgpolicy:1.0"))
+		Expect(orgpolicy.ReadinessProbe.TCPSocket.Port.IntVal).To(Equal(int32(50100)))
+		Expect(envValue(orgpolicy.Env, "APME_PLUGIN_LISTEN")).To(Equal("0.0.0.0:50100"))
+
+		mounted := false
+		for _, m := range orgpolicy.VolumeMounts {
+			if m.MountPath == "/etc/apme-plugin" && m.ReadOnly {
+				mounted = true
+			}
+		}
+		Expect(mounted).To(BeTrue())
+		for _, m := range opa.VolumeMounts {
+			Expect(m.MountPath).NotTo(Equal("/etc/apme-plugin"))
+		}
+		volFound := false
+		for _, v := range dep.Spec.Template.Spec.Volumes {
+			if v.Name == "plugin-orgpolicy-config" {
+				volFound = true
+				Expect(v.ConfigMap.Name).To(Equal("orgpolicy-data"))
+			}
+		}
+		Expect(volFound).To(BeTrue())
+
+		// Second reconcile is a no-op (SSA / no drift).
+		sum := dep.Annotations["apme.ansible.com/config-checksum"]
+		reconcileN(ctx, r, nn, 1)
+		dep2 := &appsv1.Deployment{}
+		Expect(k8sClient.Get(ctx, nn, dep2)).To(Succeed())
+		Expect(dep2.Annotations["apme.ansible.com/config-checksum"]).To(Equal(sum))
+		Expect(hasContainer(dep2, "plugin-orgpolicy")).To(BeTrue())
+
+		// Removing plugins garbage-collects sidecars on the next roll.
+		Expect(k8sClient.Get(ctx, nn, cr)).To(Succeed())
+		cr.Spec.Plugins = nil
+		Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+		reconcileN(ctx, r, nn, 1)
+		dep3 := &appsv1.Deployment{}
+		Expect(k8sClient.Get(ctx, nn, dep3)).To(Succeed())
+		Expect(hasContainer(dep3, "plugin-orgpolicy")).To(BeFalse())
+		Expect(hasContainer(dep3, "plugin-secscan")).To(BeFalse())
+		Expect(envValue(containerByName(dep3, "engine").Env, "APME_PLUGIN_ORGPOLICY_ADDRESS")).To(Equal(""))
 	})
 
 	It("does not delete managed Postgres on mode switch", func() {

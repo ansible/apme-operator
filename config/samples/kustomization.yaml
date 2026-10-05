@@ -2,4 +2,5 @@
 resources:
 - apme_v1alpha1_apme.yaml
 - apme_v1alpha1_apme_external.yaml
+- apme_v1alpha1_apme_plugins.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,0 +1,21 @@
+apiVersion: apme.ansible.com/v1alpha1
+kind: Apme
+metadata:
+  labels:
+    app.kubernetes.io/name: apme-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: apme
+spec:
+  version: "2026.8.10"
+  replicas: 1
+  # Third-party Plugin sidecars (org-supplied images). Omitted/empty = none.
+  # Engine discovers each via APME_PLUGIN_<NAME>_ADDRESS (ADR-042).
+  plugins:
+    - name: orgpolicy
+      image: registry.example.com/apme-plugin-orgpolicy:1.0
+      # port: 50100  # optional; omit for auto-assign in 50100–50199
+      # configMapRef:
+      #   name: orgpolicy-data  # mounted read-only at /etc/apme-plugin
+  exposure:
+    route:
+      enabled: true

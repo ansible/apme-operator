@@ -67,6 +67,7 @@ Samples in-repo:
 |------|-----|
 | [`config/samples/apme_v1alpha1_apme.yaml`](../config/samples/apme_v1alpha1_apme.yaml) | Managed Postgres + Route |
 | [`config/samples/apme_v1alpha1_apme_external.yaml`](../config/samples/apme_v1alpha1_apme_external.yaml) | External DB Secret |
+| [`config/samples/apme_v1alpha1_apme_plugins.yaml`](../config/samples/apme_v1alpha1_apme_plugins.yaml) | Example `spec.plugins` entry |
 
 ## Spec overview
 
@@ -76,6 +77,7 @@ Samples in-repo:
 | `image.registry` | `quay.io/ansible`; images are `{registry}/apme-{name}:{version}` |
 | `replicas` | `1` (maximum 1 in v1) |
 | `components.*` | Optional toggles (`gitleaks`, `collectionHealth`, `depAudit`, `ui`); omitted booleans default **true** |
+| `plugins` | Optional third-party Plugin sidecars; omitted/empty = none (see below) |
 | `database` | Managed Postgres unless `connectionSecretRef.name` is set |
 | `storage` | PVC sizes for sessions and Galaxy proxy cache |
 | `exposure.route` | Enabled by default on OpenShift; `host` optional (OpenShift default when empty) |
@@ -98,6 +100,30 @@ Examples with defaults: `quay.io/ansible/apme-engine:2026.8.10`, `…/apme-ui:20
 - They are **not** operator git tags (`v0.1.0`) and **not** Helm chart SHA digests unless that digest is also tagged on the Quay `apme-*` repositories.
 - Set `spec.version` to a tag that exists on Quay for your registry; use `spec.image.pullSecrets` / a mirror registry when pulling privately.
 - If a tag is missing, pods show `ImagePullBackOff` and the `Apme` status surfaces an `ImagePullError` / waiting message with the resolved image name.
+
+### Third-party plugins (`spec.plugins`)
+
+Org-specific policy containers (banned collections, custom scanners, etc.) belong in `spec.plugins`, not in the built-in OPA/Native images. Each entry is an org-supplied image; the operator does **not** pull `quay.io/ansible/apme-*` for plugins.
+
+```yaml
+spec:
+  plugins:
+    - name: orgpolicy
+      image: registry.example.com/apme-plugin-orgpolicy:1.0
+      # port: 50100   # optional; omit to auto-assign in 50100–50199
+      configMapRef:
+        name: orgpolicy-data   # optional; mounted read-only at /etc/apme-plugin
+```
+
+| Contract | Value |
+|----------|--------|
+| Container name | `plugin-<name>` |
+| Listen env (plugin) | `APME_PLUGIN_LISTEN=0.0.0.0:<port>` |
+| Engine discovery | `APME_PLUGIN_<NAME>_ADDRESS=127.0.0.1:<port>` (`name` uppercased) |
+| Port range | `50100–50199` (explicit or operator-assigned; stable across reconciles) |
+| `name` | Required, unique, `[a-z0-9]+`, max 32 (no hyphens) |
+
+Plugins are optional for Engine: until ansible/apme ships ADR-042 discovery, unknown `APME_PLUGIN_*` env vars are ignored. See also [`config/samples/apme_v1alpha1_apme_plugins.yaml`](../config/samples/apme_v1alpha1_apme_plugins.yaml).
 
 ## Database
 
