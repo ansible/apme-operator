@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"os"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -9,6 +10,19 @@ import (
 
 	apmev1alpha1 "github.com/ansible/apme-operator/api/v1alpha1"
 )
+
+const (
+	pluginPortMin int32 = 50100
+	pluginPortMax int32 = 50199
+)
+
+// ResolvedPlugin is one third-party Plugin sidecar with an assigned port.
+type ResolvedPlugin struct {
+	Name          string
+	Image         string
+	Port          int32
+	ConfigMapName string
+}
 
 // Desired is the fully defaulted intent for one Apme instance.
 type Desired struct {
@@ -25,6 +39,8 @@ type Desired struct {
 	CollectionHealth bool
 	DepAudit         bool
 	UI               bool
+
+	Plugins []ResolvedPlugin
 
 	Abbenay              bool
 	AbbenayImage         string
@@ -182,8 +198,58 @@ func From(cr *apmev1alpha1.Apme) Desired {
 		d.AbbenayStorageClass = cr.Spec.Abbenay.Persistence.StorageClass
 	}
 
+	d.Plugins = resolvePlugins(cr.Spec.Plugins)
 	d.ProxyEnv = clusterProxyEnv()
 	return d
+}
+
+// resolvePlugins assigns stable ports in 50100–50199. Explicit ports win;
+// remaining plugins (sorted by name) take the lowest free ports.
+func resolvePlugins(in []apmev1alpha1.PluginSpec) []ResolvedPlugin {
+	if len(in) == 0 {
+		return nil
+	}
+	used := make(map[int32]struct{}, len(in))
+	out := make([]ResolvedPlugin, len(in))
+	needAssign := make([]int, 0, len(in))
+	for i, p := range in {
+		out[i] = ResolvedPlugin{
+			Name:          p.Name,
+			Image:         p.Image,
+			Port:          p.Port,
+			ConfigMapName: p.ConfigMapRef.Name,
+		}
+		if p.Port != 0 {
+			used[p.Port] = struct{}{}
+			continue
+		}
+		needAssign = append(needAssign, i)
+	}
+	sort.Slice(needAssign, func(a, b int) bool {
+		return out[needAssign[a]].Name < out[needAssign[b]].Name
+	})
+	next := pluginPortMin
+	for _, i := range needAssign {
+		for {
+			if _, taken := used[next]; !taken && next <= pluginPortMax {
+				break
+			}
+			next++
+			if next > pluginPortMax {
+				// CRD caps list size / uniqueness; leave 0 if exhausted (should not happen).
+				break
+			}
+		}
+		if next > pluginPortMax {
+			break
+		}
+		out[i].Port = next
+		used[next] = struct{}{}
+		next++
+	}
+	// Deterministic container/env order: sort by name.
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func clusterProxyEnv() []corev1.EnvVar {

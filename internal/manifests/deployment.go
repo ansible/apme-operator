@@ -35,6 +35,9 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	if d.DepAudit {
 		cs = append(cs, containers.DepAudit(d))
 	}
+	for _, p := range d.Plugins {
+		cs = append(cs, containers.Plugin(d, p))
+	}
 	cs = append(cs, containers.GalaxyProxy(d), containers.Gateway(d))
 	if d.UI {
 		cs = append(cs, containers.UI(d))
@@ -57,6 +60,19 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	vols := []corev1.Volume{
 		pvcVol("sessions", d.Name+"-sessions"),
 		pvcVol("proxy-cache", d.Name+"-proxy-cache"),
+	}
+	for _, p := range d.Plugins {
+		if p.ConfigMapName == "" {
+			continue
+		}
+		vols = append(vols, corev1.Volume{
+			Name: containers.PluginConfigVolumeName(p.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: p.ConfigMapName},
+				},
+			},
+		})
 	}
 	if d.GeneratePostgres {
 		vols = append(vols,

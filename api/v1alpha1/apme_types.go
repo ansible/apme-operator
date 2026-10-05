@@ -51,6 +51,8 @@ const (
 )
 
 // ApmeSpec defines the desired state of Apme.
+// +kubebuilder:validation:XValidation:rule="!has(self.plugins) || self.plugins.map(p, p.name).size() == self.plugins.map(p, p.name).distinct().size()", message="plugins[].name must be unique"
+// +kubebuilder:validation:XValidation:rule="!has(self.plugins) || self.plugins.filter(p, has(p.port) && p.port != 0).map(p, p.port).size() == self.plugins.filter(p, has(p.port) && p.port != 0).map(p, p.port).distinct().size()", message="plugins[].port must be unique when set"
 type ApmeSpec struct {
 	// Version is the APME image tag (without a leading v). Defaults to 2026.8.10.
 	// +optional
@@ -70,6 +72,16 @@ type ApmeSpec struct {
 	// Components toggles optional sidecars/validators. Omitted fields default true.
 	// +optional
 	Components ComponentsSpec `json:"components,omitempty"`
+
+	// Plugins are optional third-party Plugin sidecars in the Simple pod.
+	// Omitted or empty means no plugin containers. Each entry uses an
+	// org-supplied image (not {registry}/apme-{name}:{version}).
+	// Engine discovers plugins via APME_PLUGIN_<NAME>_ADDRESS (ADR-042).
+	// +optional
+	// +kubebuilder:validation:MaxItems=32
+	// +listType=map
+	// +listMapKey=name
+	Plugins []PluginSpec `json:"plugins,omitempty"`
 
 	// Database selects managed Postgres (default) or an external Secret.
 	// +optional
@@ -119,6 +131,35 @@ type ComponentsSpec struct {
 	DepAudit *bool `json:"depAudit,omitempty"`
 	// +optional
 	UI *bool `json:"ui,omitempty"`
+}
+
+// PluginSpec is one third-party Plugin sidecar in the Simple pod.
+type PluginSpec struct {
+	// Name is a DNS-1123 label without hyphens, used as the container name
+	// suffix and env-var token. Example: orgpolicy → container plugin-orgpolicy,
+	// APME_PLUGIN_ORGPOLICY_ADDRESS.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]+$`
+	Name string `json:"name"`
+
+	// Image is the full plugin image reference (org-supplied).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// Port is the container/Engine loopback port in 50100–50199.
+	// Omit to let the operator assign the next free port in that range.
+	// +optional
+	// +kubebuilder:validation:Minimum=50100
+	// +kubebuilder:validation:Maximum=50199
+	Port int32 `json:"port,omitempty"`
+
+	// ConfigMapRef, when set, is mounted read-only at /etc/apme-plugin
+	// on this plugin container only.
+	// +optional
+	ConfigMapRef LocalObjectRef `json:"configMapRef,omitempty"`
 }
 
 // DatabaseSpec selects Managed vs External Postgres (#543 contract).

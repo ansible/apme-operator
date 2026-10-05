@@ -45,3 +45,61 @@ func TestFromExternal(t *testing.T) {
 		t.Fatalf("secret=%s", d.DatabaseSecretName)
 	}
 }
+
+func TestFromPluginsEmpty(t *testing.T) {
+	d := From(&apmev1alpha1.Apme{
+		ObjectMeta: metav1.ObjectMeta{Name: "apme", Namespace: "ns"},
+	})
+	if len(d.Plugins) != 0 {
+		t.Fatalf("plugins=%v", d.Plugins)
+	}
+}
+
+func TestResolvePluginsPorts(t *testing.T) {
+	got := resolvePlugins([]apmev1alpha1.PluginSpec{
+		{Name: "secscan", Image: "example/secscan:0.1"},
+		{Name: "orgpolicy", Image: "example/orgpolicy:1", Port: 50110},
+		{Name: "alpha", Image: "example/alpha:1"},
+	})
+	if len(got) != 3 {
+		t.Fatalf("len=%d", len(got))
+	}
+	// Sorted by name: alpha, orgpolicy, secscan
+	if got[0].Name != "alpha" || got[0].Port != 50100 {
+		t.Fatalf("alpha=%+v", got[0])
+	}
+	if got[1].Name != "orgpolicy" || got[1].Port != 50110 {
+		t.Fatalf("orgpolicy=%+v", got[1])
+	}
+	if got[2].Name != "secscan" || got[2].Port != 50101 {
+		t.Fatalf("secscan=%+v want port 50101 (skip 50110)", got[2])
+	}
+}
+
+func TestResolvePluginsStable(t *testing.T) {
+	in := []apmev1alpha1.PluginSpec{
+		{Name: "b", Image: "b:1"},
+		{Name: "a", Image: "a:1"},
+	}
+	first := resolvePlugins(in)
+	second := resolvePlugins(in)
+	if first[0].Port != second[0].Port || first[1].Port != second[1].Port {
+		t.Fatalf("unstable: %+v vs %+v", first, second)
+	}
+	if first[0].Name != "a" || first[0].Port != 50100 || first[1].Port != 50101 {
+		t.Fatalf("got=%+v", first)
+	}
+}
+
+func TestResolvePluginsConfigMap(t *testing.T) {
+	got := resolvePlugins([]apmev1alpha1.PluginSpec{
+		{
+			Name:         "orgpolicy",
+			Image:        "example/p:1",
+			ConfigMapRef: apmev1alpha1.LocalObjectRef{Name: "orgpolicy-data"},
+		},
+	})
+	if got[0].ConfigMapName != "orgpolicy-data" || got[0].Port != 50100 {
+		t.Fatalf("got=%+v", got[0])
+	}
+}

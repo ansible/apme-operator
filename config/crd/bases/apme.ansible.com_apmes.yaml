@@ -293,6 +293,54 @@ spec:
                   enabled:
                     type: boolean
                 type: object
+              plugins:
+                description: |-
+                  Plugins are optional third-party Plugin sidecars in the Simple pod.
+                  Omitted or empty means no plugin containers. Each entry uses an
+                  org-supplied image (not {registry}/apme-{name}:{version}).
+                  Engine discovers plugins via APME_PLUGIN_<NAME>_ADDRESS (ADR-042).
+                items:
+                  description: PluginSpec is one third-party Plugin sidecar in the
+                    Simple pod.
+                  properties:
+                    configMapRef:
+                      description: |-
+                        ConfigMapRef, when set, is mounted read-only at /etc/apme-plugin
+                        on this plugin container only.
+                      properties:
+                        name:
+                          type: string
+                      type: object
+                    image:
+                      description: Image is the full plugin image reference (org-supplied).
+                      minLength: 1
+                      type: string
+                    name:
+                      description: |-
+                        Name is a DNS-1123 label without hyphens, used as the container name
+                        suffix and env-var token. Example: orgpolicy → container plugin-orgpolicy,
+                        APME_PLUGIN_ORGPOLICY_ADDRESS.
+                      maxLength: 32
+                      minLength: 1
+                      pattern: ^[a-z0-9]+$
+                      type: string
+                    port:
+                      description: |-
+                        Port is the container/Engine loopback port in 50100–50199.
+                        Omit to let the operator assign the next free port in that range.
+                      format: int32
+                      maximum: 50199
+                      minimum: 50100
+                      type: integer
+                  required:
+                  - image
+                  - name
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               replicas:
                 default: 1
                 description: Replicas of the Simple APME Deployment. v1 requires 1.
@@ -393,6 +441,14 @@ spec:
                   Defaults to 2026.8.10.
                 type: string
             type: object
+            x-kubernetes-validations:
+            - message: plugins[].name must be unique
+              rule: '!has(self.plugins) || self.plugins.map(p, p.name).size() == self.plugins.map(p,
+                p.name).distinct().size()'
+            - message: plugins[].port must be unique when set
+              rule: '!has(self.plugins) || self.plugins.filter(p, has(p.port) && p.port
+                != 0).map(p, p.port).size() == self.plugins.filter(p, has(p.port)
+                && p.port != 0).map(p, p.port).distinct().size()'
           status:
             description: ApmeStatus is the observed state of Apme.
             properties:
