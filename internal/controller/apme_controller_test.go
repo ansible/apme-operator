@@ -114,6 +114,25 @@ var _ = Describe("Apme Controller", func() {
 
 		dep := &appsv1.Deployment{}
 		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		proxyToken := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nn.Name + "-proxy-admin", Namespace: nn.Namespace}, proxyToken)).To(Succeed())
+		Expect(proxyToken.Data["token"]).NotTo(BeEmpty())
+		Expect(proxyToken.OwnerReferences).To(HaveLen(1))
+		Expect(proxyToken.OwnerReferences[0].UID).To(Equal(cr.UID))
+		for _, c := range dep.Spec.Template.Spec.Containers {
+			if c.Name != "gateway" && c.Name != "galaxy-proxy" {
+				continue
+			}
+			tokenFound := false
+			for _, e := range c.Env {
+				if e.Name == "APME_PROXY_ADMIN_TOKEN" {
+					tokenFound = true
+					Expect(e.ValueFrom.SecretKeyRef.Name).To(Equal(proxyToken.Name))
+					Expect(e.ValueFrom.SecretKeyRef.Key).To(Equal("token"))
+				}
+			}
+			Expect(tokenFound).To(BeTrue(), c.Name)
+		}
 		Expect(*dep.Spec.Replicas).To(Equal(int32(1)))
 		Expect(dep.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		found := false
@@ -127,6 +146,22 @@ var _ = Describe("Apme Controller", func() {
 		}
 		Expect(found).To(BeTrue())
 		Expect(hasContainer(dep, "abbenay")).To(BeFalse())
+
+		By("preserving the proxy token and deployment template across reconciles")
+		initialAnnotations := dep.Spec.Template.Annotations
+		reconcileN(ctx, r, nn, 1)
+		preserved := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(proxyToken), preserved)).To(Succeed())
+		Expect(preserved.Data).To(Equal(proxyToken.Data))
+		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Annotations).To(Equal(initialAnnotations))
+
+		By("rolling out both proxy clients when the admin token changes")
+		proxyToken.Data["token"] = []byte("replacement-token")
+		Expect(k8sClient.Update(ctx, proxyToken)).To(Succeed())
+		reconcileN(ctx, r, nn, 1)
+		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Annotations).NotTo(Equal(initialAnnotations))
 
 		got := &apmev1alpha1.Apme{}
 		Expect(k8sClient.Get(ctx, nn, got)).To(Succeed())

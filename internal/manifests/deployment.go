@@ -173,3 +173,13 @@ func NewAbbenayTokenSecret(d resolve.Desired, token string) *corev1.Secret {
 		StringData: map[string]string{d.AbbenayTokenKey: token},
 	}
 }
+
+// NewProxyAdminTokenSecret supplies authentication shared by Gateway and Galaxy Proxy.
+func NewProxyAdminTokenSecret(d resolve.Desired, token string) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta:   typeMeta("Secret", "v1"),
+		ObjectMeta: meta(d.ProxyAdminTokenName, d.Namespace, componentEngine, d),
+		Type:       corev1.SecretTypeOpaque,
+		Data:       map[string][]byte{d.ProxyAdminTokenKey: []byte(token)},
+	}
+}

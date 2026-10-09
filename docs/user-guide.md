@@ -125,6 +125,41 @@ spec:
 
 Plugins are optional for Engine: until ansible/apme ships ADR-042 discovery, unknown `APME_PLUGIN_*` env vars are ignored. See also [`config/samples/apme_v1alpha1_apme_plugins.yaml`](../config/samples/apme_v1alpha1_apme_plugins.yaml).
 
+## Abbenay provider configuration
+
+For a Red Hat MaaS endpoint that implements OpenAI Chat Completions, configure
+the provider with `engine: redhat`. The virtual provider name, model names,
+credentials, and endpoint remain specific to your environment. For example:
+
+```yaml
+providers:
+  rh-maas:
+    engine: redhat
+    base_url: https://your-maas-endpoint.example/v1
+    models:
+      gpt-oss-20b: {}
+```
+
+The `openai` engine uses OpenAI's Responses API. Using it with a MaaS endpoint
+that implements Chat Completions can fail during streaming, including errors
+such as `text part ... not found`.
+
+`spec.abbenay.configMapRef` seeds the persistent configuration only when
+`config.yaml` does not exist. Updating the seed ConfigMap does not replace an
+existing configuration. Update an existing provider through Abbenay's settings
+interface; use the corrected seed for new instances.
+
+## Galaxy proxy administration
+
+The operator creates an owned `{name}-proxy-admin` Secret with a `token` key.
+Gateway and Galaxy Proxy share this token through `APME_PROXY_ADMIN_TOKEN`,
+allowing Gateway to synchronize configured Galaxy servers through the proxy's
+authenticated administration API. The token is preserved across reconciles;
+changes to the Secret trigger a workload rollout.
+
+This authenticates Gateway to Galaxy Proxy. Collection source URLs still come
+from the configured Galaxy servers.
+
 ## Database
 
 ### Managed (default)
