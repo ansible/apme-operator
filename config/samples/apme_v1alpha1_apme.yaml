@@ -8,6 +8,13 @@ metadata:
 spec:
   version: "2026.8.10"
   replicas: 1
+  # Optional additional trust for private Automation Hub downloads.
+  # galaxyProxy:
+  #   tls:
+  #     verify: true
+  #     caBundleConfigMapRef:
+  #       name: private-hub-ca
+  #       key: ca-bundle.crt
   components:
     gitleaks: true
     collectionHealth: true

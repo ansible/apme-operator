@@ -256,6 +256,37 @@ spec:
                         type: object
                     type: object
                 type: object
+              galaxyProxy:
+                description: GalaxyProxy configures collection-download transport.
+                properties:
+                  tls:
+                    description: GalaxyProxyTLSSpec controls default verification
+                      and additional CA trust.
+                    properties:
+                      caBundleConfigMapRef:
+                        description: |-
+                          CABundleConfigMapRef points to a same-namespace PEM CA bundle.
+                          The operator merges it with system roots for the Galaxy Proxy.
+                        properties:
+                          key:
+                            default: ca-bundle.crt
+                            description: Key defaults ca-bundle.crt.
+                            minLength: 1
+                            pattern: ^[A-Za-z0-9._-]+$
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      verify:
+                        description: |-
+                          Verify defaults true. Set false only for an explicit lab opt-out.
+                          Per-server validate_certs settings supplied by Portal/Gateway take precedence.
+                        type: boolean
+                    type: object
+                type: object
               image:
                 description: Image configures registry, pull policy, and pull secrets.
                 properties:

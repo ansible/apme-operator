@@ -91,6 +91,10 @@ type ApmeSpec struct {
 	// +optional
 	Storage StorageSpec `json:"storage,omitempty"`
 
+	// GalaxyProxy configures collection-download transport.
+	// +optional
+	GalaxyProxy GalaxyProxySpec `json:"galaxyProxy,omitempty"`
+
 	// Exposure configures OpenShift Routes and optional Ingress.
 	// +optional
 	Exposure ExposureSpec `json:"exposure,omitempty"`
@@ -306,6 +310,36 @@ type LocalObjectRef struct {
 type NetworkPolicySpec struct {
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// GalaxyProxySpec controls the collection proxy's deployment settings.
+type GalaxyProxySpec struct {
+	// +optional
+	TLS GalaxyProxyTLSSpec `json:"tls,omitempty"`
+}
+
+// GalaxyProxyTLSSpec controls default verification and additional CA trust.
+type GalaxyProxyTLSSpec struct {
+	// Verify defaults true. Set false only for an explicit lab opt-out.
+	// Per-server validate_certs settings supplied by Portal/Gateway take precedence.
+	// +optional
+	Verify *bool `json:"verify,omitempty"`
+	// CABundleConfigMapRef points to a same-namespace PEM CA bundle.
+	// The operator merges it with system roots for the Galaxy Proxy.
+	// +optional
+	CABundleConfigMapRef *ConfigMapKeyRef `json:"caBundleConfigMapRef,omitempty"`
+}
+
+// ConfigMapKeyRef identifies one data key in a same-namespace ConfigMap.
+type ConfigMapKeyRef struct {
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Key defaults ca-bundle.crt.
+	// +kubebuilder:default=ca-bundle.crt
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9._-]+$`
+	// +optional
+	Key string `json:"key,omitempty"`
 }
 
 // ApmeStatus is the observed state of Apme.

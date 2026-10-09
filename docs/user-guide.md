@@ -80,6 +80,7 @@ Samples in-repo:
 | `plugins` | Optional third-party Plugin sidecars; omitted/empty = none (see below) |
 | `database` | Managed Postgres unless `connectionSecretRef.name` is set |
 | `storage` | PVC sizes for sessions and Galaxy proxy cache |
+| `galaxyProxy.tls` | Default collection-download verification and optional Hub CA ConfigMap |
 | `exposure.route` | Enabled by default on OpenShift; `host` optional (OpenShift default when empty) |
 | `exposure.ingress` | Optional vanilla Kubernetes Ingress |
 | `abbenay` | AI sidecar; **off** by default |
@@ -151,8 +152,37 @@ interface; use the corrected seed for new instances.
 
 ## Galaxy proxy administration
 
+### Private Hub certificate trust
+
+The operator supports explicit TLS settings in the `Apme` spec:
+
+```yaml
+spec:
+  galaxyProxy:
+    tls:
+      verify: true
+      caBundleConfigMapRef:
+        name: private-hub-ca
+        key: ca-bundle.crt
+```
+
+Create the referenced ConfigMap in the same namespace with PEM CA certificates
+under the selected key (`ca-bundle.crt` by default). An init container merges
+these certificates with the Galaxy Proxy image's system roots and supplies
+`SSL_CERT_FILE` to the proxy. The operator validates the bundle and includes its
+contents in the pod checksum; updates are picked up during regular reconciliation
+and restart the pod to rebuild trust. No additional UID or SCC privileges are needed.
+
+Verification defaults to enabled. Set `verify: false` for an explicit lab opt-out;
+the operator then sets `ANSIBLE_GALAXY_IGNORE=true`. Per-server `validate_certs`
+settings from Portal/Gateway override this deployment default. For Portal-managed
+Hub sources, configure `ansible.rhaap.checkSSL` consistently with the intended
+TLS policy. Disabling verification does not add missing collections to Hub.
+
+### Shared administration token
+
 The operator creates an owned `{name}-proxy-admin` Secret with a `token` key.
-Gateway and Galaxy Proxy share this token through `APME_PROXY_ADMIN_TOKEN`,
+Engine, Gateway, and Galaxy Proxy share this token through `APME_PROXY_ADMIN_TOKEN`,
 allowing Gateway to synchronize configured Galaxy servers through the proxy's
 authenticated administration API. The token is preserved across reconciles;
 changes to the Secret trigger a workload rollout.
@@ -161,13 +191,17 @@ A same-named Secret without this instance's controller ownership, or with an
 empty token, causes a visible reconciliation error. Resolve the name collision
 before retrying reconciliation.
 
-This authenticates Gateway to Galaxy Proxy. Collection source URLs still come
+This authenticates Gateway configuration pushes and Engine collection preparation
+to Galaxy Proxy. Collection source URLs still come
 from the configured Galaxy servers.
 
 Configure collection sources in Gateway or through the connected Portal before
 scanning. Gateway's empty server list is authoritative and disables upstream
 collection resolution. Configure public Galaxy explicitly if it is an intended
 source.
+The operator sets `APME_PROXY_REQUIRE_GATEWAY_CONFIG=1`, so the proxy waits for
+Gateway configuration even when the cache is empty or unavailable. Gateway
+reconciles every 15 seconds to recover from failed pushes and proxy-only restarts.
 
 ## Database
 
