@@ -44,6 +44,9 @@ type Desired struct {
 
 	ProxyAdminTokenName string
 	ProxyAdminTokenKey  string
+	GalaxyTLSVerify     *bool
+	GalaxyCAConfigMap   string
+	GalaxyCAKey         string
 
 	Abbenay              bool
 	AbbenayImage         string
@@ -109,6 +112,7 @@ func From(cr *apmev1alpha1.Apme) Desired {
 		Namespace:            cr.Namespace,
 		ProxyAdminTokenName:  cr.Name + "-proxy-admin",
 		ProxyAdminTokenKey:   "token",
+		GalaxyTLSVerify:      cr.Spec.GalaxyProxy.TLS.Verify,
 		Version:              cr.Spec.Version,
 		Registry:             cr.Spec.Image.Registry,
 		PullPolicy:           cr.Spec.Image.PullPolicy,
@@ -135,6 +139,13 @@ func From(cr *apmev1alpha1.Apme) Desired {
 
 	if d.Version == "" {
 		d.Version = apmev1alpha1.DefaultVersion
+	}
+	if ref := cr.Spec.GalaxyProxy.TLS.CABundleConfigMapRef; ref != nil {
+		d.GalaxyCAConfigMap = ref.Name
+		d.GalaxyCAKey = ref.Key
+	}
+	if d.GalaxyCAKey == "" {
+		d.GalaxyCAKey = "ca-bundle.crt"
 	}
 	if d.Registry == "" {
 		d.Registry = apmev1alpha1.DefaultRegistry

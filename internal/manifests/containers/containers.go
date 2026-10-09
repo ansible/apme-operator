@@ -2,6 +2,7 @@ package containers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -78,6 +79,7 @@ func Engine(d resolve.Desired) corev1.Container {
 		"APME_GALAXY_PROXY_URL", "http://127.0.0.1:8765",
 		"APME_REPORTING_ENDPOINT", "127.0.0.1:50060",
 	)
+	e = append(e, secretRef("APME_PROXY_ADMIN_TOKEN", d.ProxyAdminTokenName, d.ProxyAdminTokenKey))
 	if d.Gitleaks {
 		e = append(e, corev1.EnvVar{Name: "GITLEAKS_GRPC_ADDRESS", Value: "127.0.0.1:50056"})
 	}
@@ -240,16 +242,54 @@ func Plugin(d resolve.Desired, p resolve.ResolvedPlugin) corev1.Container {
 
 // GalaxyProxy serves PEP 503 wheels.
 func GalaxyProxy(d resolve.Desired) corev1.Container {
+	e := []corev1.EnvVar{
+		secretRef("APME_PROXY_ADMIN_TOKEN", d.ProxyAdminTokenName, d.ProxyAdminTokenKey),
+		{Name: "APME_PROXY_REQUIRE_GATEWAY_CONFIG", Value: "1"},
+	}
+	if d.GalaxyTLSVerify != nil {
+		e = append(e, corev1.EnvVar{Name: "ANSIBLE_GALAXY_IGNORE", Value: strconv.FormatBool(!*d.GalaxyTLSVerify)})
+	}
+	mounts := []corev1.VolumeMount{{Name: "proxy-cache", MountPath: "/cache"}}
+	if d.GalaxyCAConfigMap != "" {
+		e = append(e, corev1.EnvVar{Name: "SSL_CERT_FILE", Value: "/etc/apme/galaxy-ca/ca-bundle.crt"})
+		mounts = append(mounts, corev1.VolumeMount{Name: "galaxy-ca-bundle", MountPath: "/etc/apme/galaxy-ca", ReadOnly: true})
+	}
 	return corev1.Container{
 		Name:            "galaxy-proxy",
 		Image:           d.Image("galaxy-proxy"),
 		ImagePullPolicy: pull(d),
 		SecurityContext: emptySC(),
-		Env:             withProxy([]corev1.EnvVar{secretRef("APME_PROXY_ADMIN_TOKEN", d.ProxyAdminTokenName, d.ProxyAdminTokenKey)}, d),
+		Env:             withProxy(e, d),
 		ReadinessProbe:  tcpProbe(8765, 5, 10),
 		LivenessProbe:   tcpProbe(8765, 10, 30),
-		VolumeMounts:    []corev1.VolumeMount{{Name: "proxy-cache", MountPath: "/cache"}},
+		VolumeMounts:    mounts,
 		Resources:       resources(d),
+	}
+}
+
+// InitGalaxyCABundle merges additional Hub trust with the image's system roots.
+func InitGalaxyCABundle(d resolve.Desired) corev1.Container {
+	script := `set -e
+BUNDLE=/work/ca-bundle.crt
+rm -f "$BUNDLE"
+if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
+  cat /etc/pki/tls/certs/ca-bundle.crt > "$BUNDLE"
+elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+  cat /etc/ssl/certs/ca-certificates.crt > "$BUNDLE"
+else
+  : > "$BUNDLE"
+fi
+printf '\n' >> "$BUNDLE"
+cat /hub-ca/ca-bundle.crt >> "$BUNDLE"
+`
+	return corev1.Container{
+		Name: "init-galaxy-ca", Image: d.Image("galaxy-proxy"),
+		ImagePullPolicy: pull(d), SecurityContext: emptySC(),
+		Command: []string{"/bin/sh", "-c", script},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "galaxy-ca", MountPath: "/hub-ca", ReadOnly: true},
+			{Name: "galaxy-ca-bundle", MountPath: "/work"},
+		},
 	}
 }
 

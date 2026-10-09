@@ -7,9 +7,11 @@ package controller
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -161,8 +163,22 @@ func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apm
 	if err := r.Get(ctx, types.NamespacedName{Name: d.ProxyAdminTokenName, Namespace: d.Namespace}, proxyToken); err != nil {
 		return err
 	}
+	caBundle := ""
+	if d.GalaxyCAConfigMap != "" {
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, types.NamespacedName{Name: d.GalaxyCAConfigMap, Namespace: d.Namespace}, cm); err != nil {
+			return fmt.Errorf("load Galaxy Proxy CA ConfigMap: %w", err)
+		}
+		caBundle = cm.Data[d.GalaxyCAKey]
+		if strings.TrimSpace(caBundle) == "" {
+			return fmt.Errorf("galaxy proxy CA ConfigMap %q must contain nonempty key %q", d.GalaxyCAConfigMap, d.GalaxyCAKey)
+		}
+		if !x509.NewCertPool().AppendCertsFromPEM([]byte(caBundle)) {
+			return fmt.Errorf("galaxy proxy CA ConfigMap %q key %q must contain PEM certificates", d.GalaxyCAConfigMap, d.GalaxyCAKey)
+		}
+	}
 	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.PostgresTLSSecretName,
-		d.AbbenayTokenName, d.ProxyAdminTokenName, string(proxyToken.Data[d.ProxyAdminTokenKey]), d.Version)
+		d.AbbenayTokenName, d.ProxyAdminTokenName, string(proxyToken.Data[d.ProxyAdminTokenKey]), d.Version, caBundle)
 	objs := []client.Object{
 		manifests.Deployment(d, sum),
 		manifests.EngineService(d),

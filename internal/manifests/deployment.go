@@ -47,6 +47,9 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	}
 
 	var inits []corev1.Container
+	if d.GalaxyCAConfigMap != "" {
+		inits = append(inits, containers.InitGalaxyCABundle(d))
+	}
 	if d.GeneratePostgres {
 		inits = append(inits, containers.InitDBCABundle(d))
 	}
@@ -60,6 +63,17 @@ func Deployment(d resolve.Desired, checksum string) *appsv1.Deployment {
 	vols := []corev1.Volume{
 		pvcVol("sessions", d.Name+"-sessions"),
 		pvcVol("proxy-cache", d.Name+"-proxy-cache"),
+	}
+	if d.GalaxyCAConfigMap != "" {
+		vols = append(vols,
+			corev1.Volume{Name: "galaxy-ca", VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: d.GalaxyCAConfigMap},
+					Items:                []corev1.KeyToPath{{Key: d.GalaxyCAKey, Path: "ca-bundle.crt"}},
+				},
+			}},
+			emptyVol("galaxy-ca-bundle"),
+		)
 	}
 	for _, p := range d.Plugins {
 		if p.ConfigMapName == "" {

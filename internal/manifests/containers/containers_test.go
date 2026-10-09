@@ -10,12 +10,12 @@ import (
 	"github.com/ansible/apme-operator/internal/resolve"
 )
 
-func TestGalaxyProxyAndGatewayShareAdminToken(t *testing.T) {
+func TestEngineGalaxyProxyAndGatewayShareAdminToken(t *testing.T) {
 	for _, abbenay := range []bool{false, true} {
 		cr := &apmev1alpha1.Apme{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test-ns"}}
 		cr.Spec.Abbenay.Enabled = abbenay
 		d := resolve.From(cr)
-		for _, c := range []corev1.Container{GalaxyProxy(d), Gateway(d)} {
+		for _, c := range []corev1.Container{Engine(d), GalaxyProxy(d), Gateway(d)} {
 			found := false
 			for _, e := range c.Env {
 				if e.Name == "APME_PROXY_ALLOW_UNAUTH_ADMIN" {
@@ -61,6 +61,38 @@ func TestAbbenayProbesUseBinaryStatus(t *testing.T) {
 			if arg == "node" {
 				t.Fatalf("%s probe must not invoke node: %v", p.name, p.cmd)
 			}
+		}
+	}
+}
+
+func TestGalaxyTLSConfiguration(t *testing.T) {
+	yes, no := true, false
+	for _, verify := range []*bool{nil, &yes, &no} {
+		cr := &apmev1alpha1.Apme{}
+		cr.Spec.GalaxyProxy.TLS.Verify = verify
+		cr.Spec.GalaxyProxy.TLS.CABundleConfigMapRef = &apmev1alpha1.ConfigMapKeyRef{Name: "hub-ca"}
+		d := resolve.From(cr)
+		if d.GalaxyCAConfigMap != "hub-ca" || d.GalaxyCAKey != "ca-bundle.crt" {
+			t.Fatalf("CA reference defaults = %s/%s", d.GalaxyCAConfigMap, d.GalaxyCAKey)
+		}
+		c := GalaxyProxy(d)
+		seen := false
+		for _, e := range c.Env {
+			if e.Name == "ANSIBLE_GALAXY_IGNORE" {
+				seen = true
+				if verify == nil || e.Value != map[bool]string{true: "false", false: "true"}[*verify] {
+					t.Fatalf("unexpected TLS env: %v", e)
+				}
+			}
+			if e.Name == "SSL_CERT_FILE" && e.Value != "/etc/apme/galaxy-ca/ca-bundle.crt" {
+				t.Fatalf("unexpected CA path: %s", e.Value)
+			}
+		}
+		if seen != (verify != nil) {
+			t.Fatalf("TLS default override presence=%t", seen)
+		}
+		if len(InitGalaxyCABundle(d).VolumeMounts) != 2 {
+			t.Fatal("CA initializer must mount source and destination")
 		}
 	}
 }

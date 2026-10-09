@@ -14,6 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apmev1alpha1 "github.com/ansible/apme-operator/api/v1alpha1"
+	"github.com/ansible/apme-operator/internal/manifests/postgres"
+	"github.com/ansible/apme-operator/internal/resolve"
 )
 
 func boolPtr(v bool) *bool { return &v }
@@ -79,6 +81,35 @@ var _ = Describe("Apme Controller", func() {
 		}
 	})
 
+	It("rolls the proxy when Hub CA content changes and rejects invalid bundles", func() {
+		nn := types.NamespacedName{Name: "apme-hub-ca", Namespace: "default"}
+		cr := &apmev1alpha1.Apme{ObjectMeta: metav1.ObjectMeta{Name: nn.Name, Namespace: nn.Namespace}}
+		cr.Spec.Exposure.Route.Enabled = boolPtr(false)
+		cr.Spec.GalaxyProxy.TLS.CABundleConfigMapRef = &apmev1alpha1.ConfigMapKeyRef{Name: "test-hub-ca"}
+		cert, err := postgres.NewTLSSecret(resolve.From(cr))
+		Expect(err).NotTo(HaveOccurred())
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test-hub-ca", Namespace: nn.Namespace}, Data: map[string]string{"ca-bundle.crt": string(cert.Data["ca.crt"])}}
+		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, cm) })
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+		r := newReconciler()
+		reconcileN(ctx, r, nn, 2)
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		sum := dep.Spec.Template.Annotations["apme.ansible.com/config-checksum"]
+		Expect(envValue(containerByName(dep, "galaxy-proxy").Env, "SSL_CERT_FILE")).To(Equal("/etc/apme/galaxy-ca/ca-bundle.crt"))
+		cert, err = postgres.NewTLSSecret(resolve.From(cr))
+		Expect(err).NotTo(HaveOccurred())
+		cm.Data["ca-bundle.crt"] = string(cert.Data["ca.crt"])
+		Expect(k8sClient.Update(ctx, cm)).To(Succeed())
+		reconcileN(ctx, r, nn, 1)
+		Expect(k8sClient.Get(ctx, nn, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Annotations["apme.ansible.com/config-checksum"]).NotTo(Equal(sum))
+		cm.Data["ca-bundle.crt"] = "invalid PEM"
+		Expect(k8sClient.Update(ctx, cm)).To(Succeed())
+		_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+		Expect(err).To(HaveOccurred())
+	})
 	It("creates managed Postgres and wires APME_DATABASE_URL", func() {
 		nn := types.NamespacedName{Name: "apme-managed", Namespace: "default"}
 		cr := &apmev1alpha1.Apme{
@@ -120,7 +151,7 @@ var _ = Describe("Apme Controller", func() {
 		Expect(proxyToken.OwnerReferences).To(HaveLen(1))
 		Expect(proxyToken.OwnerReferences[0].UID).To(Equal(cr.UID))
 		for _, c := range dep.Spec.Template.Spec.Containers {
-			if c.Name != "gateway" && c.Name != "galaxy-proxy" {
+			if c.Name != "gateway" && c.Name != "galaxy-proxy" && c.Name != "engine" {
 				continue
 			}
 			tokenFound := false
