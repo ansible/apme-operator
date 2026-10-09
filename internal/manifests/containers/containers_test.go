@@ -3,8 +3,42 @@ package containers
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apmev1alpha1 "github.com/ansible/apme-operator/api/v1alpha1"
 	"github.com/ansible/apme-operator/internal/resolve"
 )
+
+func TestGalaxyProxyAndGatewayShareAdminToken(t *testing.T) {
+	for _, abbenay := range []bool{false, true} {
+		cr := &apmev1alpha1.Apme{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test-ns"}}
+		cr.Spec.Abbenay.Enabled = abbenay
+		d := resolve.From(cr)
+		for _, c := range []corev1.Container{GalaxyProxy(d), Gateway(d)} {
+			found := false
+			for _, e := range c.Env {
+				if e.Name == "APME_PROXY_ALLOW_UNAUTH_ADMIN" {
+					t.Fatal("operator must not disable proxy admin authentication")
+				}
+				if e.Name != "APME_PROXY_ADMIN_TOKEN" {
+					continue
+				}
+				found = true
+				if e.Value != "" || e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
+					t.Fatalf("%s admin token must use a Secret reference", c.Name)
+				}
+				ref := e.ValueFrom.SecretKeyRef
+				if ref.Name != "test-proxy-admin" || ref.Key != "token" {
+					t.Fatalf("%s admin token reference = %s/%s", c.Name, ref.Name, ref.Key)
+				}
+			}
+			if !found {
+				t.Fatalf("%s is missing proxy admin authentication (abbenay=%t)", c.Name, abbenay)
+			}
+		}
+	}
+}
 
 func TestAbbenayProbesUseBinaryStatus(t *testing.T) {
 	c := Abbenay(resolve.Desired{

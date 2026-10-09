@@ -92,6 +92,9 @@ func (r *ApmeReconciler) ensureAll(ctx context.Context, cr *apmev1alpha1.Apme, d
 	if err := r.ensureAbbenay(ctx, cr, d); err != nil {
 		return leftover, err
 	}
+	if err := r.ensureProxyAdminToken(ctx, cr, d); err != nil {
+		return leftover, err
+	}
 	return leftover, r.applyWorkload(ctx, cr, d)
 }
 
@@ -154,7 +157,12 @@ func (r *ApmeReconciler) ensureAbbenay(ctx context.Context, cr *apmev1alpha1.Apm
 }
 
 func (r *ApmeReconciler) applyWorkload(ctx context.Context, cr *apmev1alpha1.Apme, d resolve.Desired) error {
-	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.PostgresTLSSecretName, d.AbbenayTokenName, d.Version)
+	proxyToken := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: d.ProxyAdminTokenName, Namespace: d.Namespace}, proxyToken); err != nil {
+		return err
+	}
+	sum := manifests.Checksum(d.DatabaseSecretName, d.DatabaseSecretKey, d.PostgresTLSSecretName,
+		d.AbbenayTokenName, d.ProxyAdminTokenName, string(proxyToken.Data[d.ProxyAdminTokenKey]), d.Version)
 	objs := []client.Object{
 		manifests.Deployment(d, sum),
 		manifests.EngineService(d),
@@ -278,6 +286,32 @@ func (r *ApmeReconciler) ensureAbbenayToken(ctx context.Context, owner *apmev1al
 		return err
 	}
 	sec := manifests.NewAbbenayTokenSecret(d, tok)
+	if err := controllerutil.SetControllerReference(owner, sec, r.Scheme); err != nil {
+		return err
+	}
+	return r.Create(ctx, sec)
+}
+
+func (r *ApmeReconciler) ensureProxyAdminToken(ctx context.Context, owner *apmev1alpha1.Apme, d resolve.Desired) error {
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.ProxyAdminTokenName, Namespace: d.Namespace}, existing)
+	if err == nil {
+		if !metav1.IsControlledBy(existing, owner) {
+			return fmt.Errorf("proxy admin secret %q must be controlled by this Apme instance", d.ProxyAdminTokenName)
+		}
+		if len(existing.Data[d.ProxyAdminTokenKey]) == 0 {
+			return fmt.Errorf("proxy admin secret %q must contain a non-empty %q", d.ProxyAdminTokenName, d.ProxyAdminTokenKey)
+		}
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	tok, err := randomToken(32)
+	if err != nil {
+		return err
+	}
+	sec := manifests.NewProxyAdminTokenSecret(d, tok)
 	if err := controllerutil.SetControllerReference(owner, sec, r.Scheme); err != nil {
 		return err
 	}

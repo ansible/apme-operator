@@ -245,7 +245,7 @@ func GalaxyProxy(d resolve.Desired) corev1.Container {
 		Image:           d.Image("galaxy-proxy"),
 		ImagePullPolicy: pull(d),
 		SecurityContext: emptySC(),
-		Env:             withProxy(nil, d),
+		Env:             withProxy([]corev1.EnvVar{secretRef("APME_PROXY_ADMIN_TOKEN", d.ProxyAdminTokenName, d.ProxyAdminTokenKey)}, d),
 		ReadinessProbe:  tcpProbe(8765, 5, 10),
 		LivenessProbe:   tcpProbe(8765, 10, 30),
 		VolumeMounts:    []corev1.VolumeMount{{Name: "proxy-cache", MountPath: "/cache"}},
@@ -262,6 +262,7 @@ func Gateway(d resolve.Desired) corev1.Container {
 		"APME_GATEWAY_HTTP_PORT", "8080",
 	)
 	e = append(e, secretRef("APME_DATABASE_URL", d.DatabaseSecretName, d.DatabaseSecretKey))
+	e = append(e, secretRef("APME_PROXY_ADMIN_TOKEN", d.ProxyAdminTokenName, d.ProxyAdminTokenKey))
 	if d.CollectionHealth {
 		e = append(e, corev1.EnvVar{Name: "COLLECTION_HEALTH_GRPC_ADDRESS", Value: "127.0.0.1:50058"})
 	}

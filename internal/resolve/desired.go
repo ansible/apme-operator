@@ -42,6 +42,9 @@ type Desired struct {
 
 	Plugins []ResolvedPlugin
 
+	ProxyAdminTokenName string
+	ProxyAdminTokenKey  string
+
 	Abbenay              bool
 	AbbenayImage         string
 	AbbenayTokenName     string
@@ -104,6 +107,8 @@ func From(cr *apmev1alpha1.Apme) Desired {
 	d := Desired{
 		Name:                 cr.Name,
 		Namespace:            cr.Namespace,
+		ProxyAdminTokenName:  cr.Name + "-proxy-admin",
+		ProxyAdminTokenKey:   "token",
 		Version:              cr.Spec.Version,
 		Registry:             cr.Spec.Image.Registry,
 		PullPolicy:           cr.Spec.Image.PullPolicy,
