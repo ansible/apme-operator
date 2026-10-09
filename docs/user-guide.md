@@ -164,6 +164,11 @@ before retrying reconciliation.
 This authenticates Gateway to Galaxy Proxy. Collection source URLs still come
 from the configured Galaxy servers.
 
+Configure collection sources in Gateway or through the connected Portal before
+scanning. Gateway's empty server list is authoritative and disables upstream
+collection resolution. Configure public Galaxy explicitly if it is an intended
+source.
+
 ## Database
 
 ### Managed (default)
