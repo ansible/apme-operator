@@ -58,4 +58,17 @@ func TestProxyAdminTokenLifecycle(t *testing.T) {
 	if err := r.ensureProxyAdminToken(ctx, cr, d); err == nil {
 		t.Fatal("an existing secret with no token must fail visibly")
 	}
+	second.Data["token"] = []byte("existing-token")
+	for _, refs := range [][]metav1.OwnerReference{nil, first.OwnerReferences} {
+		second.OwnerReferences = refs
+		if len(refs) != 0 {
+			second.OwnerReferences[0].UID = "another-owner"
+		}
+		if err := r.Update(ctx, second); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.ensureProxyAdminToken(ctx, cr, d); err == nil {
+			t.Fatal("a same-named secret not controlled by this instance must fail visibly")
+		}
+	}
 }

@@ -296,6 +296,9 @@ func (r *ApmeReconciler) ensureProxyAdminToken(ctx context.Context, owner *apmev
 	existing := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: d.ProxyAdminTokenName, Namespace: d.Namespace}, existing)
 	if err == nil {
+		if !metav1.IsControlledBy(existing, owner) {
+			return fmt.Errorf("proxy admin secret %q must be controlled by this Apme instance", d.ProxyAdminTokenName)
+		}
 		if len(existing.Data[d.ProxyAdminTokenKey]) == 0 {
 			return fmt.Errorf("proxy admin secret %q must contain a non-empty %q", d.ProxyAdminTokenName, d.ProxyAdminTokenKey)
 		}

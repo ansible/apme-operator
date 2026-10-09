@@ -157,6 +157,10 @@ allowing Gateway to synchronize configured Galaxy servers through the proxy's
 authenticated administration API. The token is preserved across reconciles;
 changes to the Secret trigger a workload rollout.
 
+A same-named Secret without this instance's controller ownership, or with an
+empty token, causes a visible reconciliation error. Resolve the name collision
+before retrying reconciliation.
+
 This authenticates Gateway to Galaxy Proxy. Collection source URLs still come
 from the configured Galaxy servers.
 
