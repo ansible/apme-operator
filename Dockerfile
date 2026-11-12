@@ -2,7 +2,7 @@
 # Release and docker-buildx set TARGETARCH per platform (linux/amd64 + linux/arm64).
 # A bare `docker build` / `make docker-build` without PLATFORM uses the host arch only —
 # an amd64-only image will CrashLoop on ARM nodes (exec format error).
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:9.9 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
